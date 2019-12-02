@@ -1,4 +1,4 @@
-class ConnectionError(Exception):
+class ConnectionsError(Exception):
     """
         expression -- input expression in which the error occurred
         message -- explanation of the error

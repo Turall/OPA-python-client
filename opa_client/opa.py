@@ -12,7 +12,7 @@ import requests
 from user_agent import generate_user_agent
 from OpaExceptions.OpaExceptions import (
     CheckPermissionError,
-    ConnectionError,
+    ConnectionsError,
     DeleteDataError,
     DeletePolicyError,
     PathNotFoundError,
@@ -20,7 +20,7 @@ from OpaExceptions.OpaExceptions import (
     RegoParseError,
 )
 
-__version__ = "1.0"
+__version__ = "1.0.1"
 
 
 class OpaClient:
@@ -55,7 +55,7 @@ class OpaClient:
         if response.status_code == 200:
             return True
 
-        raise ConnectionError("service unreachable", "check config and try again")
+        raise ConnectionsError("service unreachable", "check config and try again")
 
     def get_policies_list(self):
 
