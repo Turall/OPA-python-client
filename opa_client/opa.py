@@ -20,7 +20,7 @@ from OpaExceptions.OpaExceptions import (
     RegoParseError,
 )
 
-__version__ = "1.0.1"
+__version__ = "1.0.3"
 
 
 class OpaClient:
@@ -92,6 +92,12 @@ class OpaClient:
         """
 
         return self.__update_opa_policy_fromstring(new_policy, endpoint)
+
+    def update_opa_policy_fromfile(self, filepath, endpoint):
+        return self.__update_opa_policy_fromfile(filepath, endpoint)
+
+    def update_opa_policy_fromurl(self, url, endpoint):
+        return self.__update_opa_policy_fromurl(url, endpoint)
 
     def update_or_create_opa_data(self, new_data, endpoint):
 
@@ -180,6 +186,11 @@ class OpaClient:
         response = requests.put(url, json=new_data)
         return True if response.status_code == 204 else False
 
+    def __update_opa_policy_fromfile(self, filepath, endpoint):
+        if filepath:
+            with open(filepath, "r") as rf:
+                return self.__update_opa_policy_fromstring(rf.read(), endpoint)
+
     def __update_opa_policy_fromstring(self, new_policy, endpoint):
         if new_policy:
             url = self.__policy_root.format(self.__root_url, endpoint)
@@ -202,9 +213,9 @@ class OpaClient:
             response.json().get("code"), response.json().get("message")
         )
 
-    def __update_opa_policy_fromurl(self, url, to_endpoint):
+    def __update_opa_policy_fromurl(self, url, endpoint):
         response = self.__session.get(url)
-        return self.__update_opa_policy_fromstring(response.content, to_endpoint)
+        return self.__update_opa_policy_fromstring(response.content, endpoint)
 
     def __opa_policy_to_file(self, policy_name, path, filename):
         raw_policy = self.__get_opa_policy(policy_name)
