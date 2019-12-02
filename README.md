@@ -1,6 +1,6 @@
 # Python Open Policy Agent (OPA) Client 
 
-## https://www.openpolicyagent.org/
+See offical documentation page [Open Policy Agent](https://www.openpolicyagent.org/docs/latest/)
 
 ```
 >>> from opa_client.opa import OpaClient
