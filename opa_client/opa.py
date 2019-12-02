@@ -178,7 +178,6 @@ class OpaClient:
     def __update_opa_data(self, new_data, endpoint):
         url = self.__data_root.format(self.__root_url, endpoint)
         response = requests.put(url, json=new_data)
-        print(response.status_code)
         return True if response.status_code == 204 else False
 
     def __update_opa_policy_fromstring(self, new_policy, endpoint):
@@ -297,7 +296,6 @@ class OpaClient:
                     permission_url += "/" + rule.get("head").get("name")
                     find = True
         if find:
-            print(permission_url)
             response = requests.post(permission_url, json=input_data)
             return response.json()
 
