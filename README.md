@@ -1,6 +1,21 @@
 # Python Open Policy Agent (OPA) Client 
 
+
+
+
 See offical documentation page [Open Policy Agent](https://www.openpolicyagent.org/docs/latest/)
+
+
+### Installation ###
+
+```sh
+ $ pip install OPA-python-client
+```
+
+
+
+
+## Usage Examples ##
 
 ```python
 >>> from opa_client.opa import OpaClient
@@ -158,6 +173,8 @@ client.check_permission(input_data=permission_you_want_check, policy_name="testp
 ```
 
 
+# Contributing #
 
+#### Free to open issue and send PR ####
 
 ### OPA-python-client  supports Python >= 3.6
