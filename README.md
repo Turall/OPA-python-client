@@ -36,7 +36,7 @@ True
 ... """
 
 >>> client.update_opa_policy_fromstring(test_policy, "testpolicy")
-True
+'Yes I"m here :)'
 >>> client.get_policies_list()
 ['testpolicy']
 >>> data = ["world", "hello"]
@@ -46,6 +46,41 @@ True
 >>> client.check_permission(input_data=check_data, policy_name="testpolicy", rule_name="hello")
 {'result': True}
 ```
+
+
+### Connection to OPA service ###
+
+```python
+from opa_client.opa import OpaClient
+
+client = OpaClient() # default host='localhost', port=8181, version='v1'
+
+client.check_connection() # response is  Yes I'm here :)
+
+```
+
+
+### Connection to OPA service with SSL ###
+
+```python
+
+from opa_client.opa import OpaClient
+
+
+client = OpaClient(
+    host="https://192.168.99.100",
+    port=8181,
+    version="v1",
+    ssl=True,
+    cert="/your/certificate/file/path/mycert.crt",
+)
+
+client.check_connection() # response is  Yes I'm here :)
+
+```
+
+
+
 
 ### Update policy from rego file ###
 
@@ -177,4 +212,4 @@ client.check_permission(input_data=permission_you_want_check, policy_name="testp
 
 #### Free to open issue and send PR ####
 
-### OPA-python-client  supports Python >= 3.6
+### OPA-python-client  supports Python >= 3.5
