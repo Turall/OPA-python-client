@@ -21,7 +21,7 @@ See offical documentation page [Open Policy Agent](https://www.openpolicyagent.o
 >>> from opa_client.opa import OpaClient
 >>> client = OpaClient() # default host='localhost', port=8181, version='v1'
 >>> client.check_connection()
-True
+'Yes I"m here :)'
 >>>  test_policy = """
 ...     package play
 ... 
@@ -36,7 +36,7 @@ True
 ... """
 
 >>> client.update_opa_policy_fromstring(test_policy, "testpolicy")
-'Yes I"m here :)'
+True
 >>> client.get_policies_list()
 ['testpolicy']
 >>> data = ["world", "hello"]
