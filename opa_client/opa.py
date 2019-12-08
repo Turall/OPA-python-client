@@ -11,7 +11,7 @@
 import requests
 import urllib3
 import codecs
-import json
+import json, os, glob
 from user_agent import generate_user_agent
 from OpaExceptions.OpaExceptions import (
     CheckPermissionError,
@@ -22,6 +22,8 @@ from OpaExceptions.OpaExceptions import (
     PolicyNotFoundError,
     RegoParseError,
     SSLError,
+    FileError,
+    TypeExecption
 )
 
 json_reader = codecs.getreader("utf-8")
@@ -67,6 +69,9 @@ class OpaClient:
         self.__secure = False
         self.__schema = "http://"
 
+        if type(port) not in [int]:
+            raise TypeError("The port must be integer")
+        
         if ssl:
             self.__ssl = ssl
             self.__cert = cert
@@ -130,7 +135,7 @@ class OpaClient:
             if not self.__secure:
                 response = self.__session.get(url, timeout=(3), headers=self.__headers)
                 if response.status_code == 200:
-                    return "Yes I'm here :) "
+                    return "Yes I'm here :)"
 
                 raise ConnectionsError(
                     "service unreachable", "check config and try again"
@@ -138,7 +143,7 @@ class OpaClient:
 
             response = self.__session("GET", url, retries=2, timeout=1.5)
             if response.status == 200:
-                return "Yes I'm here :) "
+                return "Yes I'm here :)"
 
         except Exception:
             raise ConnectionsError("service unreachable", "check config and try again")
@@ -194,7 +199,7 @@ class OpaClient:
             param :: new_data : name of defined data
             type  :: new_data : dict
             param :: endpoint : is the path of your new data or existing one in OPA 
-            type  :: policy_name : str
+            type  :: endpoint : str
             example:
                 my_policy_list = [
                     {"resource": "/api/someapi", "identity": "your_identity", "method": "PUT"},
@@ -264,7 +269,7 @@ class OpaClient:
         if not self.__secure:
             response = self.__session.get(url)
             code = response.status_code
-            response = response.jsons()
+            response = response.json()
         else:
             response = self.__session(
                 "GET", url, headers=self.__headers, retries=2, timeout=1.5
@@ -292,11 +297,27 @@ class OpaClient:
         return True if code == 204 else False
 
     def __update_opa_policy_fromfile(self, filepath, endpoint):
-        if filepath:
-            with open(filepath, "r") as rf:
-                return self.__update_opa_policy_fromstring(rf.read(), endpoint)
+        if os.path.isfile(filepath):
+            if filepath:
+                with open(filepath, "r") as rf:
+                    return self.__update_opa_policy_fromstring(rf.read(), endpoint)
+        
+        if os.path.exists(filepath):
+            raise FileError(f"{filepath}", "does not exist in your directory")
+
+        file = [f for f in glob.glob(f'{filepath}')]
+
+        if not file:
+            raise FileError(f"{filepath}", "does not exist in your directory")
+        
+        else:
+            raise FileError(f"{filepath}", "is not a file, make sure you provide a file")
 
     def __update_opa_policy_fromstring(self, new_policy, endpoint):
+
+        if type(new_policy) is not str:
+            raise TypeExecption(f"{new_policy} is not string type")
+
         if new_policy:
             url = self.__policy_root.format(self.__root_url, endpoint)
             if not self.__secure:
@@ -356,6 +377,8 @@ class OpaClient:
 
     def __opa_policy_to_file(self, policy_name, path, filename):
         raw_policy = self.__get_opa_policy(policy_name)
+
+
         if isinstance(raw_policy, dict):
             try:
                 if path:
@@ -510,3 +533,42 @@ class OpaClient:
             f"{rule_name} rule not found", "policy or rule name not correct"
         )
 
+    @property
+    def _host(self):
+        return self.__host
+    
+    @property
+    def _port(self):
+        return self.__port
+    
+    @property
+    def _version(self):
+        return self.__version
+    
+    @property
+    def _root_url(self):
+        return self.__root_url
+    
+    @property
+    def _schema(self):
+        return self.__schema
+
+    @property
+    def _policy_root(self):
+        return self.__policy_root
+    
+    @property
+    def _data_root(self):
+        return self.__data_root
+    
+    @property
+    def _secure(self):
+        return self.__secure
+
+    @property
+    def _ssl(self):
+        return self.__ssl
+    
+    @property
+    def _cert(self):
+        return self.__cert
