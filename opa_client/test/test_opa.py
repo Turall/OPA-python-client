@@ -85,7 +85,7 @@ class TestClient(TestCase):
         '''
         self.assertEqual(True, self.myclient.update_opa_policy_fromstring(new_policy, "test"))
 
-        self.assertEqual(False, self.myclient.update_opa_policy_fromfile("test.txt","test"))
+        self.assertEqual(False, self.myclient.update_opa_policy_fromfile("/home/root/Documents/OPA-python-client/opa_client/test/test.txt","test"))
 
         # self.assertEqual(self.myclient.update_opa_policy_fromurl())
         self.assertEqual(["test"], self.myclient.get_policies_list())
@@ -120,7 +120,7 @@ class TestClient(TestCase):
             except Exception as identifier:
                 print(identifier)
         
-        #TODO #no idea what
+        #TODO
         # self.assertEqual("sad", self.myclient.get_opa_policy("test"))
 
         self.assertTrue(True, self.myclient.delete_opa_policy("test"))

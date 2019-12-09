@@ -297,21 +297,13 @@ class OpaClient:
         return True if code == 204 else False
 
     def __update_opa_policy_fromfile(self, filepath, endpoint):
+
         if os.path.isfile(filepath):
-            if filepath:
-                with open(filepath, "r") as rf:
-                    return self.__update_opa_policy_fromstring(rf.read(), endpoint)
+            with open(filepath, "r") as rf:
+                return self.__update_opa_policy_fromstring(rf.read(), endpoint)
         
-        if os.path.exists(filepath):
-            raise FileError(f"{filepath}", "does not exist in your directory")
-
-        file = [f for f in glob.glob(f'{filepath}')]
-
-        if not file:
-            raise FileError(f"{filepath}", "does not exist in your directory")
         
-        else:
-            raise FileError(f"{filepath}", "is not a file, make sure you provide a file")
+        raise FileError(f"{filepath}", "is not a file, make sure you provide a file")
 
     def __update_opa_policy_fromstring(self, new_policy, endpoint):
 
