@@ -11,7 +11,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="OPA-python-client",
-    version="1.0.0",
+    version="1.0.5",
     author="Tural Muradov",
     author_email="tural_m@hotmail.com",
     description="Client for connection to the OPA service",
@@ -19,7 +19,12 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/Turall/OPA-python-client.git",
     license="MIT",
-    install_requires=["user-agent>=0.1.9", "requests>=2.5.4.1"],
+    install_requires=[
+        "user-agent>=0.1.9",
+        "requests>=2.5.4.1",
+        "urllib3==1.25.7",
+        "certifi>=2019.11.28",
+    ],
     packages=setuptools.find_packages(),
     classifiers=[
         "Intended Audience :: Developers",
