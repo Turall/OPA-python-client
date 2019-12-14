@@ -1,6 +1,6 @@
 # Python Open Policy Agent (OPA) Client 
 
-[![Downloads](https://pepy.tech/badge/opa-python-client/week)](https://pepy.tech/project/opa-python-client/week)
+[![Downloads](https://pepy.tech/badge/opa-python-client/month)](https://pepy.tech/project/opa-python-client/month)
 
 See offical documentation page [Open Policy Agent](https://www.openpolicyagent.org/docs/latest/)
 
