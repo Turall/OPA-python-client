@@ -13,6 +13,7 @@ import urllib3
 import codecs
 import json, os, glob
 from user_agent import generate_user_agent
+from typing import Union
 from OpaExceptions.OpaExceptions import (
     CheckPermissionError,
     ConnectionsError,
@@ -29,13 +30,13 @@ from OpaExceptions.OpaExceptions import (
 json_reader = codecs.getreader("utf-8")
 
 
-__version__ = "1.0.5"
+__version__ = "1.0.6"
 
 
 class OpaClient:
 
     """ OpaClient client object to connect and manipulate OPA service.
-        
+        ```
         The class object holds session information necesseary to connect OPA service.
         param :: host : to connect OPA service ,defaults to localhost
         type  :: host: str
@@ -48,17 +49,18 @@ class OpaClient:
         param :: cert : path to client certificate information to use for mutual TLS authentification
         type  :: cert : str
         param :: headers :  dictionary of headers to send, defaults to None
+        ```
 
     """
 
     def __init__(
         self,
-        host="localhost",
-        port=8181,
-        version="v1",
-        ssl=False,
-        cert=None,
-        headers=None,
+        host: str="localhost",
+        port: int=8181,
+        version: str="v1",
+        ssl: bool=False,
+        cert:Union[None,str]=None,
+        headers: Union[None,dict]=None,
         **kwargs,
     ):
         host = host.lstrip()
@@ -114,6 +116,7 @@ class OpaClient:
             self.__headers = requests.utils.default_headers()
 
             self.__headers.update({"User-Agent": generate_user_agent()})
+
         if self.__secure:
             https = urllib3.PoolManager(
                 cert_reqs="CERT_REQUIRED",
@@ -123,24 +126,19 @@ class OpaClient:
             )
             self.__session = https.request
         else:
-            self.__session = requests.Session()
+            https = urllib3.PoolManager(
+                headers=self.__headers
+            )
+            self.__session = https.request
 
     def check_connection(self):
-        """ Checks whether established connection config True or not.   
+        """
+            Checks whether established connection config True or not.   
             if not properly configured will raise an ConnectionError.
         """
-
+        
         url = self.__policy_root.format(self.__root_url, "")
         try:
-            if not self.__secure:
-                response = self.__session.get(url, timeout=(3), headers=self.__headers)
-                if response.status_code == 200:
-                    return "Yes I'm here :)"
-
-                raise ConnectionsError(
-                    "service unreachable", "check config and try again"
-                )
-
             response = self.__session("GET", url, retries=2, timeout=1.5)
             if response.status == 200:
                 return "Yes I'm here :)"
@@ -150,26 +148,28 @@ class OpaClient:
 
         raise ConnectionsError("service unreachable", "check config and try again")
 
-    def get_policies_list(self):
+    def get_policies_list(self) -> list:
 
         """ Returns all  OPA policies in the service"""
 
         return self.__get_policies_list()
 
-    def get_policies_info(self):
-        """ Returns information about each policy, including
+    def get_policies_info(self) -> dict:
+        """ 
+            Returns information about each policy, including
             policy path and policy rules
         """
         return self.__get_policies_info()
 
-    def update_opa_policy_fromstring(self, new_policy, endpoint):
+    def update_opa_policy_fromstring(self, new_policy: str, endpoint: str) -> bool:
 
         """ Write your rego policy with using python string type and update your OPA policies.
+            ```
             param :: new_policy : is the name of your new defined  rego policy. 
             param : endpoint : is the path of your new policy in OPA
 
             example:
-                new_policy='''
+                new_policy=
                     package play
 
                     default hello = false
@@ -178,24 +178,31 @@ class OpaClient:
                         m := input.message
                         m == "world"
                     }
-                '''
+                
                 client = OpaClient()
                 client.update_opa_policy_fromstring(new_policy,'exampleapi')
+            ```
 
         """
 
         return self.__update_opa_policy_fromstring(new_policy, endpoint)
 
-    def update_opa_policy_fromfile(self, filepath, endpoint):
+    def update_opa_policy_fromfile(self, filepath: str, endpoint: str) -> bool:
+
+        """ Write your rego policy to file and update your OPA policies. """
+
         return self.__update_opa_policy_fromfile(filepath, endpoint)
 
-    def update_opa_policy_fromurl(self, url, endpoint):
+    def update_opa_policy_fromurl(self, url: str, endpoint: str) -> bool:
+
+        """Update your OPA policies from internet."""
+
         return self.__update_opa_policy_fromurl(url, endpoint)
 
-    def update_or_create_opa_data(self, new_data, endpoint):
+    def update_or_create_opa_data(self, new_data: dict, endpoint: str) -> bool:
 
         """ Updates existing data or create new data for policy.
-
+            ```
             param :: new_data : name of defined data
             type  :: new_data : dict
             param :: endpoint : is the path of your new data or existing one in OPA 
@@ -208,6 +215,7 @@ class OpaClient:
 
                 client = OpaClient()
                 client.update_or_create_opa_data(my_policy_list,'exampledata/accesses')
+            ```
         """
 
         return self.__update_opa_data(new_data, endpoint)
@@ -216,9 +224,10 @@ class OpaClient:
         """Returns OPA raw data in string type """
         return self.__get_opa_raw_data(data_name)
 
-    def opa_policy_to_file(self, policy_name, path=None, filename="opa_policy.rego"):
+    def opa_policy_to_file(self, policy_name: str, path: Union[str,None]=None, filename: str="opa_policy.rego"):
 
         """ Write OPA service policy to the  file.
+        ```
             param :: policy_name : name of OPA policy
             type  :: policy_name : str
 
@@ -227,30 +236,32 @@ class OpaClient:
 
             param :: filename : name of the file,default opa_policy.rego
             type  :: filename : str
+        ```
 
         """
         return self.__opa_policy_to_file(policy_name, path, filename)
 
-    def get_opa_policy(self, policy_name):
+    def get_opa_policy(self, policy_name: str) -> dict:
 
         """Returns full info about policy, provided OPA service """
 
         return self.__get_opa_policy(policy_name)
 
-    def delete_opa_policy(self, policy_name):
+    def delete_opa_policy(self, policy_name: str) -> bool:
         """ Deletes given OPA policy name """
 
         return self.__delete_opa_policy(policy_name)
 
-    def delete_opa_data(self, data_name):
+    def delete_opa_data(self, data_name: str) -> bool:
 
         """ Deletes given OPA policy data name """
 
         return self.__delete_opa_data(data_name)
 
-    def check_permission(self, input_data, policy_name, rule_name):
+    def check_permission(self, input_data: dict, policy_name: str, rule_name: str) -> dict:
 
         """
+        ```
             params :: input_data    : data which you want check permission
                 type   :: input_data  : dict
 
@@ -259,44 +270,37 @@ class OpaClient:
 
             params :: rule_name   : the name included in the policy  
                 type   :: rule_name  : str
-
+        ```
         """
 
         return self.__check(input_data, policy_name, rule_name)
 
-    def __get_opa_raw_data(self, data_name):
+    def __get_opa_raw_data(self, data_name: str):
         url = self.__data_root.format(self.__root_url, data_name)
-        if not self.__secure:
-            response = self.__session.get(url)
-            code = response.status_code
-            response = response.json()
-        else:
-            response = self.__session(
-                "GET", url, headers=self.__headers, retries=2, timeout=1.5
-            )
-            code = response.status
-            response = json.loads(response.data.decode("utf-8"))
+
+        response = self.__session(
+            "GET", url, headers=self.__headers, retries=2, timeout=1.5
+        )
+        code = response.status
+        response = json.loads(response.data.decode("utf-8"))
         return response if code == 200 else (code, "not found")
 
-    def __update_opa_data(self, new_data, endpoint):
+    def __update_opa_data(self, new_data: dict, endpoint: str):
         url = self.__data_root.format(self.__root_url, endpoint)
-        if not self.__secure:
-            response = self.__session.put(url, json=new_data)
-            code = response.status_code
-        else:
-            encoded_json = json.dumps(new_data).encode("utf-8")
-            response = self.__session(
-                "PUT",
-                url,
-                body=encoded_json,
-                headers=self.__headers,
-                retries=2,
-                timeout=1.5,
-            )
-            code = response.status
+
+        encoded_json = json.dumps(new_data).encode("utf-8")
+        response = self.__session(
+            "PUT",
+            url,
+            body=encoded_json,
+            headers=self.__headers,
+            retries=2,
+            timeout=1.5,
+        )
+        code = response.status
         return True if code == 204 else False
 
-    def __update_opa_policy_fromfile(self, filepath, endpoint):
+    def __update_opa_policy_fromfile(self, filepath: str, endpoint: str):
 
         if os.path.isfile(filepath):
             with open(filepath, "r") as rf:
@@ -305,72 +309,52 @@ class OpaClient:
         
         raise FileError(f"{filepath}", "is not a file, make sure you provide a file")
 
-    def __update_opa_policy_fromstring(self, new_policy, endpoint):
+    def __update_opa_policy_fromstring(self, new_policy: str, endpoint: str) -> bool:
 
-        if type(new_policy) is not str:
+        if not isinstance(new_policy,str) or not isinstance(endpoint,str):
             raise TypeExecption(f"{new_policy} is not string type")
 
         if new_policy:
             url = self.__policy_root.format(self.__root_url, endpoint)
-            if not self.__secure:
-                response = self.__session.put(
-                    url, data=new_policy.encode(), headers=self.__headers
-                )
-                if response.status_code == 200:
-                    return True
-                raise RegoParseError(
-                    response.json().get("code"), response.json().get("message")
-                )
-            else:
-                response = self.__session(
-                    "PUT",
-                    url,
-                    body=new_policy.encode(),
-                    headers=self.__headers,
-                    retries=2,
-                    timeout=1.5,
-                )
 
-                if response.status == 200:
-                    return True
+            response = self.__session(
+                "PUT",
+                url,
+                body=new_policy.encode(),
+                headers=self.__headers,
+                retries=2,
+                timeout=1.5,
+            )
 
-                raise RegoParseError(
-                    json.loads(response.data.decode()).get("code"),
-                    json.loads(response.data.decode()).get("message"),
-                )
+            if response.status == 200:
+                return True
+
+            raise RegoParseError(
+                json.loads(response.data.decode()).get("code"),
+                json.loads(response.data.decode()).get("message"),
+            )
 
         return False
 
-    def __get_opa_policy(self, policy_name):
+    def __get_opa_policy(self, policy_name: str) -> dict:
         url = self.__policy_root.format(self.__root_url, policy_name)
-        if not self.__secure:
-            response = self.__session.get(url, headers=self.__headers)
-            if response.status_code == 200:
-                return response.json()
 
-            raise PolicyNotFoundError(
-                response.json().get("code"), response.json().get("message")
-            )
+        response = self.__session(
+            "GET", url, headers=self.__headers, retries=2, timeout=1.5
+        )
+        data = json.loads(response.data.decode("utf-8"))
+        if response.status == 200:
 
-        else:
-            response = self.__session(
-                "GET", url, headers=self.__headers, retries=2, timeout=1.5
-            )
-            data = json.loads(response.data.decode("utf-8"))
-            if response.status == 200:
+            return data
 
-                return data
+        raise PolicyNotFoundError(data.get("code"), data.get("message"))
 
-            raise PolicyNotFoundError(data.get("code"), data.get("message"))
-
-    def __update_opa_policy_fromurl(self, url, endpoint):
+    def __update_opa_policy_fromurl(self, url: str, endpoint: str) -> bool:
         response = requests.get(url, headers=self.__headers)
         return self.__update_opa_policy_fromstring(response.text, endpoint)
 
-    def __opa_policy_to_file(self, policy_name, path, filename):
+    def __opa_policy_to_file(self, policy_name: str, path: Union[str,None], filename: str) -> bool:
         raw_policy = self.__get_opa_policy(policy_name)
-
-
         if isinstance(raw_policy, dict):
             try:
                 if path:
@@ -385,40 +369,27 @@ class OpaClient:
             except:
                 raise PathNotFoundError("error when write file", "path not found")
 
-    def __delete_opa_policy(self, policy_name):
+    def __delete_opa_policy(self, policy_name: str) -> bool:
         url = self.__policy_root.format(self.__root_url, policy_name)
-        if not self.__secure:
-            response = self.__session.delete(url, headers=self.__headers)
-            if response.status_code == 200:
-                return True
+ 
+        response = self.__session(
+            "DELETE", url, headers=self.__headers, retries=2, timeout=1.5
+        )
+        data = json.loads(response.data.decode("utf-8"))
+        if response.status == 200:
 
-            raise PolicyNotFoundError(
-                response.json().get("code"), response.json().get("message")
-            )
+            return True
 
-        else:
-            response = self.__session(
-                "DELETE", url, headers=self.__headers, retries=2, timeout=1.5
-            )
-            data = json.loads(response.data.decode("utf-8"))
-            if response.status == 200:
+        raise PolicyNotFoundError(data.get("code"), data.get("message"))
 
-                return True
-
-            raise PolicyNotFoundError(data.get("code"), data.get("message"))
-
-    def __get_policies_list(self):
+    def __get_policies_list(self) -> list:
         url = self.__policy_root.format(self.__root_url, "")
         temp = []
-        if not self.__secure:
-            response = self.__session.get(url, headers=self.__headers)
-            response = response.json()
-        else:
-            response = self.__session(
-                "GET", url, retries=2, timeout=1.5, headers=self.__headers
-            )
+        response = self.__session(
+            "GET", url, retries=2, timeout=1.5, headers=self.__headers
+        )
 
-            response = json.loads(response.data.decode())
+        response = json.loads(response.data.decode())
 
         for policy in response.get("result"):
             if policy.get("id"):
@@ -426,41 +397,28 @@ class OpaClient:
 
         return temp
 
-    def __delete_opa_data(self, data_name):
+    def __delete_opa_data(self, data_name: str) -> bool:
         url = self.__data_root.format(self.__root_url, data_name)
-        if not self.__secure:
-            response = self.__session.delete(url, headers=self.__headers)
-            if response.status_code == 204:
-                return True
 
-            raise DeleteDataError(
-                response.json().get("code"), response.json().get("message")
-            )
+        response = self.__session(
+            "DELETE", url, headers=self.__headers, retries=2, timeout=1.5
+        )
+        if response.data:
+            data = json.loads(response.data.decode("utf-8"))
+        if response.status == 204:
 
-        else:
-            response = self.__session(
-                "DELETE", url, headers=self.__headers, retries=2, timeout=1.5
-            )
-            if response.data:
-                data = json.loads(response.data.decode("utf-8"))
-            if response.status == 204:
-
-                return True
+            return True
 
         raise DeleteDataError(data.get("code"), data.get("message"))
 
-    def __get_policies_info(self):
+    def __get_policies_info(self) -> dict:
         url = self.__policy_root.format(self.__root_url, "")
-        if not self.__secure:
-            policy = self.__session.get(url)
-            result = policy.json().get("result")
-        else:
-            policy = self.__session(
-                "GET", url, retries=2, timeout=1.0, headers=self.__headers
-            )
+        policy = self.__session(
+            "GET", url, retries=2, timeout=1.0, headers=self.__headers
+        )
 
-            policy = json.loads(policy.data.decode())
-            result = policy.get("result")
+        policy = json.loads(policy.data.decode())
+        result = policy.get("result")
 
         permission_url = self.__root_url
         temp_dict = {}
@@ -484,17 +442,14 @@ class OpaClient:
 
         return temp_dict
 
-    def __check(self, input_data, policy_name, rule_name):
+    def __check(self, input_data: dict, policy_name: str, rule_name: str) -> dict:
         url = self.__policy_root.format(self.__root_url, policy_name)
-        if not self.__secure:
-            policy = self.__session.get(url)
-            result = policy.json().get("result")
-        else:
-            policy = self.__session(
-                "GET", url, headers=self.__headers, retries=2, timeout=1.5
-            )
-            policy = json.loads(policy.data.decode("utf-8"))
-            result = policy.get("result")
+
+        policy = self.__session(
+            "GET", url, headers=self.__headers, retries=2, timeout=1.5
+        )
+        policy = json.loads(policy.data.decode("utf-8"))
+        result = policy.get("result")
         find = False
         permission_url = self.__root_url
         if result:
@@ -509,9 +464,6 @@ class OpaClient:
                     permission_url += "/" + rule.get("head").get("name")
                     find = True
         if find:
-            if not self.__secure:
-                response = self.__session.post(permission_url, json=input_data)
-                return response.json()
 
             encoded_json = json.dumps(input_data).encode("utf-8")
             response = self.__session(
