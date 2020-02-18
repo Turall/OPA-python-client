@@ -131,6 +131,9 @@ class OpaClient:
             )
             self.__session = https.request
 
+    def __del__(self):
+        del self.__session
+        
     def check_connection(self):
         """
             Checks whether established connection config True or not.   
