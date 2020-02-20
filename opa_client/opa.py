@@ -132,7 +132,13 @@ class OpaClient:
             self.__session = self.__manager.request
 
     def __del__(self):
-        del self.__manager
+        self.close_connection()
+
+    def close_connection(self):
+        """
+        Close all currently open connections to the OPA server
+        """
+        self.__manager.clear()
 
     def check_connection(self):
         """
