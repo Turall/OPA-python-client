@@ -278,6 +278,13 @@ class OpaClient:
 
         return self.__check(input_data, policy_name, rule_name)
 
+    def check_policy_rule(self, input_data: dict, package_path: str, rule_name: str = None) -> dict:
+        """
+        Queries a package rule with the given input data
+        """
+
+        return self.__query(input_data, package_path, rule_name)
+
     def __get_opa_raw_data(self, data_name: str):
         url = self.__data_root.format(self.__root_url, data_name)
 
@@ -475,6 +482,25 @@ class OpaClient:
             if response.data:
                 data = json.loads(response.data.decode("utf-8"))
                 return data
+
+        raise CheckPermissionError(
+            f"{rule_name} rule not found", "path or rule name not correct"
+        )
+
+    def __query(self, input_data: dict, package_path: str, rule_name: str = None) -> dict:
+        if '.' in package_path:
+            package_path = package_path.replace('.', '/')
+        if rule_name:
+            package_path = package_path + '/' + rule_name
+        url = self.__data_root.format(self.__root_url, package_path)
+
+        encoded_json = json.dumps({ 'input': input_data }).encode("utf-8")
+        response = self.__session(
+            "POST", url, body=encoded_json, retries=2, timeout=1.5
+        )
+        if response.data:
+            data = json.loads(response.data.decode("utf-8"))
+            return data
 
         raise CheckPermissionError(
             f"{rule_name} rule not found", "policy or rule name not correct"
