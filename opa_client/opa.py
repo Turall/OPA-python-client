@@ -118,22 +118,28 @@ class OpaClient:
             self.__headers.update({"User-Agent": generate_user_agent()})
 
         if self.__secure:
-            https = urllib3.PoolManager(
+            self.__manager = urllib3.PoolManager(
                 cert_reqs="CERT_REQUIRED",
                 assert_hostname=False,
                 ca_certs=self.__cert,
                 headers=self.__headers,
             )
-            self.__session = https.request
+            self.__session = self.__manager.request
         else:
-            https = urllib3.PoolManager(
+            self.__manager = urllib3.PoolManager(
                 headers=self.__headers
             )
-            self.__session = https.request
+            self.__session = self.__manager.request
 
     def __del__(self):
-        del self.__session
-        
+        self.close_connection()
+
+    def close_connection(self):
+        """
+        Close all currently open connections to the OPA server
+        """
+        self.__manager.clear()
+
     def check_connection(self):
         """
             Checks whether established connection config True or not.   

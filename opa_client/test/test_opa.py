@@ -21,7 +21,8 @@ class TestClient(TestCase):
 
     def tearDown(self):
         '''her bir testden sonra run olur'''
-        pass
+        """ Close the connection to the OPA server by deleting the client"""
+        del self.myclient
 
     def test_client(self):
 
