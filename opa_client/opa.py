@@ -23,7 +23,7 @@ from OpaExceptions.OpaExceptions import (CheckPermissionError,
 
 json_reader = codecs.getreader("utf-8")
 
-__version__ = "1.0.6"
+__version__ = "1.2.0"
 
 
 class OpaClient:
