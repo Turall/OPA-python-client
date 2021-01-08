@@ -11,7 +11,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="OPA-python-client",
-    version="1.2.0",
+    version="1.3.0",
     author="Tural Muradov",
     author_email="tural_m@hotmail.com",
     description="Client for connection to the OPA service",
