@@ -9,6 +9,17 @@ class ConnectionsError(Exception):
         self.message = message
 
 
+class QueryExecuteError(Exception):
+    """
+        expression -- input expression in which the error occurred
+        message -- explanation of the error
+    """
+
+    def __init__(self, expression, message):
+        self.expression = expression
+        self.message = message
+
+
 class PolicyNotFoundError(Exception):
     """
         expression -- input expression in which the error occurred
@@ -85,6 +96,7 @@ class SSLError(Exception):
         self.expression = expression
         self.message = message
 
+
 class FileError(ValueError):
     """
         expression -- input expression in which the error occurred
@@ -93,6 +105,7 @@ class FileError(ValueError):
     def __init__(self, expression, message):
         self.expression = expression
         self.message = message
+
 
 class TypeExecption(TypeError):
     """

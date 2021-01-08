@@ -10,7 +10,7 @@ __pycache__/
 
 # C extensions
 *.so
-
+testopa.py
 # Distribution / packaging
 .Python
 build/
