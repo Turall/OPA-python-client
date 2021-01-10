@@ -145,6 +145,17 @@ client = OpaClient()
 
 print(client.get_opa_raw_data("testapi/testdata"))  # response is {'result': ['world', 'hello']}
 
+# You can use query params for additional info
+# provenance - If parameter is true, response will include build/version info in addition to the result.
+# metrics - Return query performance metrics in addition to result 
+
+print(client.get_opa_raw_data("userinfo",query_params={"provenance": True})) 
+# response is {'provenance': {'version': '0.25.2', 'build_commit': '4c6e524', 'build_timestamp': '2020-12-08T16:56:55Z', 'build_hostname': '3bb58334a5a9'}, 'result': {'user_roles': {'alice': ['admin'], 'bob': ['employee', 'billing'], 'eve': ['customer']}}}
+
+print(client.get_opa_raw_data("userinfo",query_params={"metrics": True})) 
+
+# response is {'metrics': {'counter_server_query_cache_hit': 0, 'timer_rego_external_resolve_ns': 231, 'timer_rego_input_parse_ns': 381, 'timer_rego_query_compile_ns': 40173, 'timer_rego_query_eval_ns': 12674, 'timer_rego_query_parse_ns': 5692, 'timer_server_handler_ns': 83490}, 'result': {'user_roles': {'alice': ['admin'], 'bob': ['employee', 'billing'], 'eve': ['customer']}}}
+
 del client
 ```
 
@@ -211,6 +222,10 @@ permission_you_want_check = {"input": {"message": "hello"}}
 client.check_permission(input_data=permission_you_want_check, policy_name="testpolicy", rule_name="hello")
 
 # response is {'result': True}
+
+# You can use query params for additional info
+# provenance - If parameter is true, response will include build/version info in addition to the result.
+# metrics - Return query performance metrics in addition to result 
 
 del client
 ```

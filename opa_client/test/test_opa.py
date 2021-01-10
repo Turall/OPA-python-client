@@ -27,13 +27,13 @@ class TestClient(TestCase):
         client = OpaClient("localhost", 8181, "v1")
         self.assertEqual("http://localhost:8181/v1", client._root_url)
 
-        client = OpaClient("127.0.0.1", 8181, "v1")
-        self.assertEqual("http://127.0.0.1:8181/v1", client._root_url)
+        client = OpaClient("localhost", 8181, "v1")
+        self.assertEqual("http://localhost:8181/v1", client._root_url)
 
         self.assertFalse(False, self.myclient._secure)
         self.assertEqual("http://", self.myclient._schema)
         self.assertEqual("v1", self.myclient._version)
-        self.assertEqual("127.0.0.1", self.myclient._host)
+        self.assertEqual("localhost", self.myclient._host)
         self.assertEqual(8181, self.myclient._port)
 
     def test_functions(self):
@@ -53,7 +53,7 @@ class TestClient(TestCase):
             print(rr)
             try:
                 my_dict = {'test': {'path': [
-                    'http://127.0.0.1:8181/v1/data/play'], 'rules': ['http://127.0.0.1:8181/v1/data/play/hello']}}
+                    'http://localhost:8181/v1/data/play'], 'rules': ['http://localhost:8181/v1/data/play/hello']}}
 
                 self.assertEqual(my_dict, self.myclient.get_policies_info())
             except Exception as testing:
@@ -77,8 +77,8 @@ class TestClient(TestCase):
 
         # self.assertEqual(self.myclient.update_opa_policy_fromurl())
         self.assertEqual(["test"], self.myclient.get_policies_list())
-        my_dict = {'test': {'path': ['http://127.0.0.1:8181/v1/data/play'],
-                            'rules': ['http://127.0.0.1:8181/v1/data/play/hello']}}
+        my_dict = {'test': {'path': ['http://localhost:8181/v1/data/play'],
+                            'rules': ['http://localhost:8181/v1/data/play/hello']}}
 
         self.assertEqual(my_dict, self.myclient.get_policies_info())
 

@@ -22,7 +22,7 @@ from .OpaExceptions import (CheckPermissionError,
                             SSLError, FileError, TypeExecption,
                             QueryExecuteError)
 
-__version__ = "1.3.0"
+__version__ = "1.3.1"
 __author__ = "Tural Muradov"
 __license__ = 'MIT'
 
@@ -248,7 +248,12 @@ class OpaClient:
         return self.__update_opa_data(new_data, endpoint)
 
     def get_opa_raw_data(self, data_name: str = "", query_params: Dict[str, bool] = dict()) -> dict:
-        """Returns OPA raw data in string type """
+        """ Returns OPA raw data in string type 
+            ```
+            param :: data_name : OPA data name you want get
+            param :: query_params : query params in url for more information about metrics
+            ```
+        """
         return self.__get_opa_raw_data(data_name, query_params)
 
     def opa_policy_to_file(self,
@@ -297,6 +302,8 @@ class OpaClient:
 
             params :: rule_name   : the name included in the policy
                 type   :: rule_name  : str
+            param :: query_params : query params in url for more information about metrics
+                type :: query_params : dict
         ```
         """
 
