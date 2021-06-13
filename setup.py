@@ -22,7 +22,7 @@ setuptools.setup(
     install_requires=[
         "user-agent>=0.1.9",
         "requests>=2.5.4.1",
-        "urllib3==1.25.8",
+        "urllib3>=1.26.5",
         "certifi>=2019.11.28",
     ],
     packages=setuptools.find_packages(),
