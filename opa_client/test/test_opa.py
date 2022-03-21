@@ -39,26 +39,15 @@ class TestClient(TestCase):
     def test_functions(self):
 
         self.assertEqual("Yes I'm here :)", self.myclient.check_connection())
-        try:
-            self.assertEqual(list(), self.myclient.get_policies_list())
-        except Exception as e:
-            print(e)
-            try:
-                self.assertEqual(["test"], self.myclient.get_policies_list())
-            except Exception as test:
-                print(test)
-        try:
-            self.assertEqual(dict(), self.myclient.get_policies_info())
-        except Exception as rr:
-            print(rr)
-            try:
-                my_dict = {'test': {'path': [
-                    'http://localhost:8181/v1/data/play'], 'rules': ['http://localhost:8181/v1/data/play/hello']}}
+        self.assertEqual(list(), self.myclient.get_policies_list())
+            
+        self.assertEqual(dict(), self.myclient.get_policies_info())
+     
+        # _dict = {'test': {'path': [
+        #     'http://localhost:8181/v1/data/play'], 'rules': ['http://localhost:8181/v1/data/play/hello']}}
 
-                self.assertEqual(my_dict, self.myclient.get_policies_info())
-            except Exception as testing:
-                print(testing)
-
+        # self.assertEqual(_dict, self.myclient.get_policies_info())
+    
         new_policy = '''
             package play
 
@@ -72,15 +61,11 @@ class TestClient(TestCase):
         self.assertEqual(
             True, self.myclient.update_opa_policy_fromstring(new_policy, "test"))
 
-        # self.assertEqual(False, self.myclient.update_opa_policy_fromfile(
-        #     "/home/root/Documents/OPA-python-client/opa_client/test/test.txt", "test"))
-
-        # self.assertEqual(self.myclient.update_opa_policy_fromurl())
         self.assertEqual(["test"], self.myclient.get_policies_list())
-        my_dict = {'test': {'path': ['http://localhost:8181/v1/data/play'],
+        _dict = {'test': {'path': ['http://localhost:8181/v1/data/play'],
                             'rules': ['http://localhost:8181/v1/data/play/hello']}}
 
-        self.assertEqual(my_dict, self.myclient.get_policies_info())
+        self.assertEqual(_dict, self.myclient.get_policies_info())
 
         my_policy_list = [
             {"resource": "/api/someapi", "identity": "your_identity", "method": "PUT"},
@@ -90,36 +75,14 @@ class TestClient(TestCase):
         self.assertTrue(True, self.myclient.update_or_create_opa_data(
             my_policy_list, 'exampledata/accesses'))
         value = {'result': {'hello': False}}
-        try:
-            self.assertEqual(dict(), self.myclient.get_opa_raw_data("play"))
-        except Exception as err:
-            print("not right one", err)
-            try:
-                self.assertEqual(
-                    value, self.myclient.get_opa_raw_data("hello"))
-            except Exception as errr:
-                print(errr)
-
+          
         self.assertEqual(True, self.myclient.opa_policy_to_file("test"))
-
-        try:
-            self.assertEqual(dict(), self.myclient.get_opa_raw_data("play"))
-        except Exception as er:
-            print("not right", er)
-            try:
-                self.assertEqual(value, self.myclient.get_opa_raw_data("play"))
-            except Exception as identifier:
-                print(identifier)
-
-        # TODO
-        # self.assertEqual("sad", self.myclient.get_opa_policy("test"))
-
+       
+        self.assertEqual(value, self.myclient.get_opa_raw_data("play"))
+    
         self.assertTrue(True, self.myclient.delete_opa_policy("test"))
         with self.assertRaises(DeletePolicyError):
             self.myclient.delete_opa_policy("test")
 
         with self.assertRaises(DeleteDataError):
             self.myclient.delete_opa_data("play")
-
-        # TODO #check with owner of client
-        # self.assertEqual(dict(), self.myclient.check_permission())
