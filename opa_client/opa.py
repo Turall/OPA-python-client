@@ -413,8 +413,8 @@ class OpaClient:
                 return True
 
             raise RegoParseError(
-                json.loads(response.data.decode()).get("code"),
-                json.loads(response.data.decode()).get("message"),
+                response.status,
+                json.loads(response.data.decode())
             )
 
         return False
