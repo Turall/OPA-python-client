@@ -22,7 +22,7 @@ from .OpaExceptions import (CheckPermissionError,
                             SSLError, FileError, TypeExecption,
                             QueryExecuteError)
 
-__version__ = "1.3.2"
+__version__ = "1.3.3"
 __author__ = "Tural Muradov"
 __license__ = 'MIT'
 
