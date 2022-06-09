@@ -1,6 +1,11 @@
 # Python Open Policy Agent (OPA) Client 
 
+[![MIT licensed](https://img.shields.io/github/license/Turall/OPA-python-client)](https://raw.githubusercontent.com/Turall/OPA-python-client/master/LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/Turall/OPA-python-client.svg)](https://github.com/Turall/OPA-python-client/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/Turall/OPA-python-client.svg)](https://github.com/Turall/OPA-python-client/network)
+[![GitHub issues](https://img.shields.io/github/issues-raw/Turall/OPA-python-client)](https://github.com/Turall/OPA-python-client/issues)
 [![Downloads](https://pepy.tech/badge/opa-python-client)](https://pepy.tech/project/opa-python-client)
+
 
 See offical documentation page [Open Policy Agent](https://www.openpolicyagent.org/docs/latest/)
 
