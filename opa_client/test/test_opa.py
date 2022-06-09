@@ -6,6 +6,7 @@ Unit tests for the OpaClient.
 
 
 from unittest import TestCase
+
 from opa_client.opa import OpaClient
 from opa_client.OpaExceptions import DeleteDataError, DeletePolicyError
 

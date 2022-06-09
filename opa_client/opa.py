@@ -8,19 +8,28 @@
 #     \|_______|    \|__|       \|__|\|__| #
 ############################################
 
-import requests
-import urllib3
 import json
 import os
-from user_agent import generate_user_agent
-from typing import Union, Dict
+from typing import Dict, Union
 from urllib.parse import urlencode
-from .OpaExceptions import (CheckPermissionError,
-                            ConnectionsError, DeleteDataError,
-                            DeletePolicyError, PathNotFoundError,
-                            PolicyNotFoundError, RegoParseError,
-                            SSLError, FileError, TypeExecption,
-                            QueryExecuteError)
+
+import requests
+import urllib3
+from user_agent import generate_user_agent
+
+from .OpaExceptions import (
+    CheckPermissionError,
+    ConnectionsError,
+    DeleteDataError,
+    DeletePolicyError,
+    FileError,
+    PathNotFoundError,
+    PolicyNotFoundError,
+    QueryExecuteError,
+    RegoParseError,
+    SSLError,
+    TypeExecption,
+)
 
 __version__ = "1.3.3"
 __author__ = "Tural Muradov"
