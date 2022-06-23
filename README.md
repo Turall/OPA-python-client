@@ -1,6 +1,11 @@
 # Python Open Policy Agent (OPA) Client 
 
+[![MIT licensed](https://img.shields.io/github/license/Turall/OPA-python-client)](https://raw.githubusercontent.com/Turall/OPA-python-client/master/LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/Turall/OPA-python-client.svg)](https://github.com/Turall/OPA-python-client/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/Turall/OPA-python-client.svg)](https://github.com/Turall/OPA-python-client/network)
+[![GitHub issues](https://img.shields.io/github/issues-raw/Turall/OPA-python-client)](https://github.com/Turall/OPA-python-client/issues)
 [![Downloads](https://pepy.tech/badge/opa-python-client)](https://pepy.tech/project/opa-python-client)
+
 
 See offical documentation page [Open Policy Agent](https://www.openpolicyagent.org/docs/latest/)
 
@@ -8,13 +13,19 @@ See offical documentation page [Open Policy Agent](https://www.openpolicyagent.o
 ### Installation ###
 
 ```sh
- $ pip install OPA-python-client
+$ pip install OPA-python-client
+```
+
+Alternatively, if you prefer to use `poetry` for package dependencies:
+
+```bash
+$ poetry shell
+$ poetry add OPA-python-client
 ```
 
 
 
-
-## Usage Examples ##
+## Usage Examples 
 
 ```python
 >>> from opa_client.opa import OpaClient
@@ -47,7 +58,7 @@ True
 ```
 
 
-### Connection to OPA service ###
+### Connection to OPA service
 
 ```python
 from opa_client.opa import OpaClient
@@ -61,10 +72,9 @@ del client
 ```
 
 
-### Connection to OPA service with SSL ###
+### Connection to OPA service with SSL
 
 ```python
-
 from opa_client.opa import OpaClient
 
 
@@ -82,9 +92,7 @@ del client
 ```
 
 
-
-
-### Update policy from rego file ###
+### Update policy from rego file
 
 ```python
 from opa_client.opa import OpaClient
@@ -99,10 +107,9 @@ del client
 ```
 
 
-### Update policy from URL ###
+### Update policy from URL
 
 ```python
-
 from opa_client.opa import OpaClient
 
 client = OpaClient() 
@@ -116,12 +123,10 @@ del client
 ```
 
 
-### Delete policy ###
+### Delete policy
 
 
 ```python
-
-
 from opa_client.opa import OpaClient
 
 client = OpaClient() 
@@ -133,12 +138,10 @@ client.get_policies_list() # response is []
 del client
 ```
 
-### Get raw data from OPA service ###
+### Get raw data from OPA service
 
 
 ```python
-
-
 from opa_client.opa import OpaClient
 
 client = OpaClient() 
@@ -159,12 +162,11 @@ print(client.get_opa_raw_data("userinfo",query_params={"metrics": True}))
 del client
 ```
 
-### Save policy to file from OPA service ###
+
+### Save policy to file from OPA service
 
 
 ```python
-
-
 from opa_client.opa import OpaClient
 
 client = OpaClient() 
@@ -174,12 +176,11 @@ client.opa_policy_to_file(policy_name="fromurl",path="/your/path",filename="exam
 del client
 ```
 
-### Delete data from OPA service ###
+
+### Delete data from OPA service
 
 
 ```python
-
-
 from opa_client.opa import OpaClient
 
 client = OpaClient() 
@@ -190,12 +191,10 @@ del client
 ```
 
 
-### Information about policy path and rules ###
+### Information about policy path and rules
 
 
 ```python
-
-
 from opa_client.opa import OpaClient
 
 client = OpaClient() 
@@ -208,12 +207,10 @@ del client
 ```
 
 
-### Check permissions ###
+### Check permissions
 
 
 ```python
-
-
 from opa_client.opa import OpaClient
 
 client = OpaClient() 
@@ -250,7 +247,6 @@ hello {
 
 check_data = {"message": "world"}
 client.check_policy_rule(input_data=check_data, package_path="play", rule_name="hello") # response {'result': True}
-
 ```
 
 ### Execute an Ad-hoc Query
@@ -286,7 +282,6 @@ print(client.ad_hoc_query(query_params={"q": "data.userinfo.user_roles[name]"}))
 #you can send body request
 print(client.ad_hoc_query(body={"query": "data.userinfo.user_roles[name] "})) 
 # response is {'result': [{'name': 'eve'}, {'name': 'alice'}, {'name': 'bob'}]}
-
 ```
 
 ### Check OPA healthy. If you want check bundels or plugins, add query params for this.
@@ -301,12 +296,14 @@ print(client.check_health({"bundle": True})) # response is  True or False
 # If your diagnostic url different than default url, you can provide it.
 print(client.check_health(diagnostic_url="http://localhost:8282/health"))  # response is  True or False
 print(client.check_health(query={"bundle": True}, diagnostic_url="http://localhost:8282/health"))  # response is  True or False
-
 ```
 
 
-# Contributing #
+# Contributing
 
-#### Free to open issue and send PR ####
+Fell free to open issue and send pull request.
 
-### OPA-python-client  supports Python >= 3.5
+Thanks To [Contributors](https://github.com/Turall/OPA-python-client/graphs/contributors).
+Contributions of any kind are welcome!
+
+Before you start please read [CONTRIBUTING](https://github.com/Turall/OPA-python-client/blob/master/CONTRIBUTING.md)
