@@ -88,7 +88,9 @@ class OpaClient:
 
         if host.startswith('https://'):
             self.__host = host
-            self.__root_url = '{}:{}/{}'.format(self.__host, self.__port, self.__version)
+            self.__root_url = '{}:{}/{}'.format(
+                self.__host, self.__port, self.__version
+            )
 
         elif host.startswith('http://'):
             self.__host = host
@@ -98,7 +100,9 @@ class OpaClient:
                     'With ssl enabled not possible to have connection with http',
                 )
 
-            self.__root_url = '{}:{}/{}'.format(self.__host, self.__port, self.__version)
+            self.__root_url = '{}:{}/{}'.format(
+                self.__host, self.__port, self.__version
+            )
 
         else:
             self.__host = host
@@ -127,6 +131,12 @@ class OpaClient:
             self.__manager = urllib3.PoolManager(headers=self.__headers)
             self.__session = self.__manager.request
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_tb):
+        self.close_connection()
+
     def __del__(self):
         self.close_connection()
 
@@ -147,7 +157,9 @@ class OpaClient:
 
         url = self.__policy_root.format(self.__root_url, '')
         try:
-            response = self.__session('GET', url, retries=self.retries, timeout=self.timeout)
+            response = self.__session(
+                'GET', url, retries=self.retries, timeout=self.timeout
+            )
             if response.status == 200:
                 return "Yes I'm here :)"
 
@@ -156,7 +168,9 @@ class OpaClient:
 
         raise ConnectionsError('service unreachable', 'check config and try again')
 
-    def check_health(self, query: Dict[str, bool] = None, diagnostic_url: str = None) -> bool:
+    def check_health(
+        self, query: Dict[str, bool] = None, diagnostic_url: str = None
+    ) -> bool:
         """
         Check OPA healthy. If you want check bundels or plugins, add query params for this.
         If your diagnostic url different than default url, you can provide it.
@@ -178,7 +192,9 @@ class OpaClient:
             url = '{}{}:{}/{}'.format(self.__schema, self.__host, self.__port, 'health')
         if query:
             url = self.prepare_args(url, query)
-        response = self.__session('GET', url, retries=self.retries, timeout=self.timeout)
+        response = self.__session(
+            'GET', url, retries=self.retries, timeout=self.timeout
+        )
         if response.status == 200:
             return True
         return False
@@ -248,7 +264,9 @@ class OpaClient:
 
         return self.__update_opa_data(new_data, endpoint)
 
-    def get_opa_raw_data(self, data_name: str = '', query_params: Dict[str, bool] = dict()) -> dict:
+    def get_opa_raw_data(
+        self, data_name: str = '', query_params: Dict[str, bool] = dict()
+    ) -> dict:
         """Returns OPA raw data in string type
         ```
         param :: data_name : OPA data name you want get
@@ -258,7 +276,10 @@ class OpaClient:
         return self.__get_opa_raw_data(data_name, query_params)
 
     def opa_policy_to_file(
-        self, policy_name: str, path: Union[str, None] = None, filename: str = 'opa_policy.rego'
+        self,
+        policy_name: str,
+        path: Union[str, None] = None,
+        filename: str = 'opa_policy.rego',
     ):
         """Write OPA service policy to the  file.
         ```
@@ -313,14 +334,18 @@ class OpaClient:
 
         return self.__check(input_data, policy_name, rule_name, query_params)
 
-    def check_policy_rule(self, input_data: dict, package_path: str, rule_name: str = None) -> dict:
+    def check_policy_rule(
+        self, input_data: dict, package_path: str, rule_name: str = None
+    ) -> dict:
         """
         Queries a package rule with the given input data
         """
 
         return self.__query(input_data, package_path, rule_name)
 
-    def ad_hoc_query(self, *, query_params: Dict[str, str] = None, body: Dict[str, str] = None):
+    def ad_hoc_query(
+        self, *, query_params: Dict[str, str] = None, body: Dict[str, str] = None
+    ):
         """Execute an ad-hoc query and return bindings for variables found in the query.
         ```
         param :: query_params for sending query string in url
@@ -328,7 +353,9 @@ class OpaClient:
         ```
         """
 
-        url = '{}{}:{}/{}/{}'.format(self.__schema, self.__host, self.__port, 'v1', 'query')
+        url = '{}{}:{}/{}/{}'.format(
+            self.__schema, self.__host, self.__port, 'v1', 'query'
+        )
         if body:
             encoded_json = json.dumps(body).encode('utf-8')
             response = self.__session(
@@ -340,7 +367,9 @@ class OpaClient:
             )
         elif query_params:
             url = self.prepare_args(url, query_params)
-            response = self.__session('GET', url, retries=self.retries, timeout=self.timeout)
+            response = self.__session(
+                'GET', url, retries=self.retries, timeout=self.timeout
+            )
         data = json.loads(response.data.decode('utf-8'))
         if response.status == 200:
             return data
@@ -356,7 +385,9 @@ class OpaClient:
     def __get_opa_raw_data(self, data_name: str, query_params: Dict[str, bool]):
         url = self.__data_root.format(self.__root_url, data_name)
         url = self.prepare_args(url, query_params)
-        response = self.__session('GET', url, retries=self.retries, timeout=self.timeout)
+        response = self.__session(
+            'GET', url, retries=self.retries, timeout=self.timeout
+        )
         code = response.status
         response = json.loads(response.data.decode('utf-8'))
         return response if code == 200 else (code, 'not found')
@@ -410,7 +441,9 @@ class OpaClient:
     def __get_opa_policy(self, policy_name: str) -> dict:
         url = self.__policy_root.format(self.__root_url, policy_name)
 
-        response = self.__session('GET', url, retries=self.retries, timeout=self.timeout)
+        response = self.__session(
+            'GET', url, retries=self.retries, timeout=self.timeout
+        )
         data = json.loads(response.data.decode('utf-8'))
         if response.status == 200:
 
@@ -422,7 +455,9 @@ class OpaClient:
         response = requests.get(url, headers=self.__headers)
         return self.__update_opa_policy_fromstring(response.text, endpoint)
 
-    def __opa_policy_to_file(self, policy_name: str, path: Union[str, None], filename: str) -> bool:
+    def __opa_policy_to_file(
+        self, policy_name: str, path: Union[str, None], filename: str
+    ) -> bool:
         raw_policy = self.__get_opa_policy(policy_name)
         if isinstance(raw_policy, dict):
             try:
@@ -440,7 +475,9 @@ class OpaClient:
     def __delete_opa_policy(self, policy_name: str) -> bool:
         url = self.__policy_root.format(self.__root_url, policy_name)
 
-        response = self.__session('DELETE', url, retries=self.retries, timeout=self.timeout)
+        response = self.__session(
+            'DELETE', url, retries=self.retries, timeout=self.timeout
+        )
         data = json.loads(response.data.decode('utf-8'))
         if response.status == 200:
             return True
@@ -451,7 +488,11 @@ class OpaClient:
         url = self.__policy_root.format(self.__root_url, '')
         temp = []
         response = self.__session(
-            'GET', url, retries=self.retries, timeout=self.timeout, headers=self.__headers
+            'GET',
+            url,
+            retries=self.retries,
+            timeout=self.timeout,
+            headers=self.__headers,
         )
 
         response = json.loads(response.data.decode())
@@ -465,7 +506,9 @@ class OpaClient:
     def __delete_opa_data(self, data_name: str) -> bool:
         url = self.__data_root.format(self.__root_url, data_name)
 
-        response = self.__session('DELETE', url, retries=self.retries, timeout=self.timeout)
+        response = self.__session(
+            'DELETE', url, retries=self.retries, timeout=self.timeout
+        )
         if response.data:
             data = json.loads(response.data.decode('utf-8'))
         if response.status == 204:
@@ -476,7 +519,11 @@ class OpaClient:
     def __get_policies_info(self) -> dict:
         url = self.__policy_root.format(self.__root_url, '')
         policy = self.__session(
-            'GET', url, retries=self.retries, timeout=self.timeout, headers=self.__headers
+            'GET',
+            url,
+            retries=self.retries,
+            timeout=self.timeout,
+            headers=self.__headers,
         )
 
         policy = json.loads(policy.data.decode())
@@ -502,12 +549,20 @@ class OpaClient:
         return temp_dict
 
     def __check(
-        self, input_data: dict, policy_name: str, rule_name: str, query_params: Dict[str, bool]
+        self,
+        input_data: dict,
+        policy_name: str,
+        rule_name: str,
+        query_params: Dict[str, bool],
     ) -> dict:
         url = self.__policy_root.format(self.__root_url, policy_name)
 
         policy = self.__session(
-            'GET', url, headers=self.__headers, retries=self.retries, timeout=self.timeout
+            'GET',
+            url,
+            headers=self.__headers,
+            retries=self.retries,
+            timeout=self.timeout,
         )
         policy = json.loads(policy.data.decode('utf-8'))
         result = policy.get('result')
@@ -538,9 +593,13 @@ class OpaClient:
                 data = json.loads(response.data.decode('utf-8'))
                 return data
 
-        raise CheckPermissionError(f'{rule_name} rule not found', 'policy or rule name not correct')
+        raise CheckPermissionError(
+            f'{rule_name} rule not found', 'policy or rule name not correct'
+        )
 
-    def __query(self, input_data: dict, package_path: str, rule_name: str = None) -> dict:
+    def __query(
+        self, input_data: dict, package_path: str, rule_name: str = None
+    ) -> dict:
         if '.' in package_path:
             package_path = package_path.replace('.', '/')
         if rule_name:
@@ -555,7 +614,9 @@ class OpaClient:
             data = json.loads(response.data.decode('utf-8'))
             return data
 
-        raise CheckPermissionError(f'{rule_name} rule not found', 'policy or rule name not correct')
+        raise CheckPermissionError(
+            f'{rule_name} rule not found', 'policy or rule name not correct'
+        )
 
     @property
     def _host(self):
