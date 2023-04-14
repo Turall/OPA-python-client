@@ -491,12 +491,15 @@ class OpaClient:
             for path in policy.get('ast').get('package').get('path'):
                 permission_url += '/' + path.get('value')
             temp_policy.append(permission_url)
-            for rule in policy.get('ast').get('rules'):
-                if not rule.get('default'):
-                    continue
+            
+            rules = list(set(
+                [rule.get("head").get("name") for rule in policy.get("ast").get("rules")]
+            ))
+            for rule in rules:
                 temp_url = permission_url
-                temp_url += '/' + rule.get('head').get('name')
+                temp_url += "/" + rule
                 temp_rules.append(temp_url)
+                
             temp_dict[policy.get('id')] = {'path': temp_policy, 'rules': temp_rules}
 
         return temp_dict
@@ -517,13 +520,11 @@ class OpaClient:
             for path in result.get('ast').get('package').get('path'):
                 permission_url += '/' + path.get('value')
 
-            for rule in result.get('ast').get('rules'):
-                if not rule.get('default'):
-                    continue
-                if rule.get('head').get('name') == rule_name:
+            rules = [rule.get("head").get("name") for rule in result.get("ast").get("rules")]
+            if rule_name in rules:
+                permission_url += "/" + rule_name
+                find = True
 
-                    permission_url += '/' + rule.get('head').get('name')
-                    find = True
         if find:
             encoded_json = json.dumps(input_data).encode('utf-8')
             permission_url = self.prepare_args(permission_url, query_params)
