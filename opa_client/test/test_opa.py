@@ -21,7 +21,7 @@ class TestClient(TestCase):
         del self.myclient
 
     def test_client(self):
-        """Set up the test  for OpaClient object"""
+        """Set up the test for OpaClient object"""
 
         client = OpaClient('localhost', 8181, 'v1')
         self.assertEqual('http://localhost:8181/v1', client._root_url)
@@ -35,59 +35,74 @@ class TestClient(TestCase):
         self.assertEqual('localhost', self.myclient._host)
         self.assertEqual(8181, self.myclient._port)
 
-    def test_functions(self):
-
+    def test_connection_to_opa(self):
         self.assertEqual("Yes I'm here :)", self.myclient.check_connection())
-        self.assertEqual(list(), self.myclient.get_policies_list())
-
-        self.assertEqual(dict(), self.myclient.get_policies_info())
-
-        # _dict = {'test': {'path': [
-        #     'http://localhost:8181/v1/data/play'],
-        #       'rules': ['http://localhost:8181/v1/data/play/hello']}
-        # }
-
-        # self.assertEqual(_dict, self.myclient.get_policies_info())
-
+    
+    def test_functions(self):
         new_policy = """
-            package play
+            package test.policy
 
-            default hello = false
+            import data.test.acl
+            import input
 
-            hello {
-                m := input.message
-                m == "world"
+            default allow = false
+
+            allow {
+                access := acl[input.user]
+                access[_] == input.access
+            }
+
+            authorized_users[user] {
+                access := acl[user]
+                access[_] == input.access
             }
         """
-        self.assertEqual(True, self.myclient.update_opa_policy_fromstring(new_policy, 'test'))
 
-        self.assertEqual(['test'], self.myclient.get_policies_list())
         _dict = {
             'test': {
-                'path': ['http://localhost:8181/v1/data/play'],
-                'rules': ['http://localhost:8181/v1/data/play/hello'],
+                'path': ['http://localhost:8181/v1/data/test/policy'],
+                'rules': [
+                    'http://localhost:8181/v1/data/test/policy/allow',
+                    'http://localhost:8181/v1/data/test/policy/authorized_users'
+                ],
             }
         }
 
-        self.assertEqual(_dict, self.myclient.get_policies_info())
+        my_policy_list = {
+            "alice": ["read","write"],
+            "bob": ["read"]
+        }
 
-        my_policy_list = [
-            {'resource': '/api/someapi', 'identity': 'your_identity', 'method': 'PUT'},
-            {'resource': '/api/someapi', 'identity': 'your_identity', 'method': 'GET'},
-        ]
+        self.assertEqual(list(), self.myclient.get_policies_list())
+        self.assertEqual(dict(), self.myclient.get_policies_info())
+        self.assertEqual(True, self.myclient.update_opa_policy_fromstring(new_policy, 'test'))
+        self.assertEqual(['test'], self.myclient.get_policies_list())
+        
+        policy_info = self.myclient.get_policies_info()
+        self.assertEqual(_dict['test']['path'], policy_info['test']['path'])
+        for rule in _dict['test']['rules']:
+            self.assertIn(rule, policy_info['test']['rules'])
 
         self.assertTrue(
-            True, self.myclient.update_or_create_opa_data(my_policy_list, 'exampledata/accesses')
+            True, self.myclient.update_or_create_opa_data(my_policy_list, 'test/acl')
         )
-        value = {'result': {'hello': False}}
 
         self.assertEqual(True, self.myclient.opa_policy_to_file('test'))
 
-        self.assertEqual(value, self.myclient.get_opa_raw_data('play'))
+        value = {'result': {'acl': {'alice': ['read', 'write'], 'bob': ['read']}, 'policy': {'allow': False, 'authorized_users': []}}}
+        self.assertEqual(value, self.myclient.get_opa_raw_data('test'))
+
+        _input_a = {"input": {"user": "alice", "access": "write"}}
+        _input_b = {"input": {"access": "read"}}
+        value_a = {"result": True}
+        value_b = {"result": ["alice", "bob"]}
+        self.assertEqual(value_a, self.myclient.check_permission(input_data=_input_a, policy_name="test", rule_name="allow"))
+        self.assertEqual(value_b, self.myclient.check_permission(input_data=_input_b, policy_name="test", rule_name="authorized_users"))
 
         self.assertTrue(True, self.myclient.delete_opa_policy('test'))
         with self.assertRaises(DeletePolicyError):
             self.myclient.delete_opa_policy('test')
 
+        self.assertTrue(True, self.myclient.delete_opa_data('test/acl'))
         with self.assertRaises(DeleteDataError):
-            self.myclient.delete_opa_data('play')
+            self.myclient.delete_opa_data('test/acl')
