@@ -23,11 +23,11 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.9"
-requests = "^2.27.1"
-urllib3 = "^1.26.9"
-certifi = "^2022.5.18"
+requests = "^2.31.0"
+urllib3 = "^2.0.3"
+certifi = "^2023.5.7"
 user-agent = "^0.1.10"
-types-requests = "^2.27.30"
+types-requests = "^2.31.0.1"
 
 [tool.poetry.dev-dependencies]
 isort = "^5.10.1"
