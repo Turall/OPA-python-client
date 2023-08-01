@@ -24,10 +24,10 @@ packages = [
 [tool.poetry.dependencies]
 python = "^3.9"
 requests = "^2.27.1"
-urllib3 = "^1.26.9"
-certifi = "^2022.5.18"
+urllib3 = ">=1.26.9"
+certifi = ">=2022.5.18"
 user-agent = "^0.1.10"
-types-requests = "^2.27.30"
+types-requests = ">=2.27.30"
 
 [tool.poetry.dev-dependencies]
 isort = "^5.10.1"
