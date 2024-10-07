@@ -22,7 +22,7 @@ OpaClient is a Python client library designed to interact with the [Open Policy 
 You can install the OpaClient package via `pip`:
 
 ```bash
-pip install OPA-python-client
+pip install opa-python-client
 ```
 
 ## Quick Start
