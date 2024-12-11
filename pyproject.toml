@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "opa-python-client"
-version = "2.0.1"
+version = "2.0.2"
 description = "Client for connection to the OPA service"
 authors = ["Tural Muradov <tural.muradoov@gmail.com>"]
 license = "MIT"
