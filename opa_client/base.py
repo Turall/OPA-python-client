@@ -23,6 +23,7 @@ class BaseClient:
 		ssl: bool = False,
 		cert: Optional[Union[str, tuple]] = None,
 		headers: Optional[dict] = None,
+		retries: int = 2,
 		timeout: float = 1.5,
 	):
 		if not isinstance(port, int):
@@ -34,6 +35,7 @@ class BaseClient:
 		self.ssl = ssl
 		self.cert = cert
 		self.timeout = timeout
+		self.retries = retries
 
 		self.schema = "https://" if ssl else "http://"
 		self.root_url = f"{self.schema}{self.host}:{self.port}/{self.version}"
@@ -41,8 +43,6 @@ class BaseClient:
 		self.headers = headers
 
 		self._session = None  # Will be initialized in the subclass
-		self.retries = 2
-		self.timeout = 1.5
 
 	def _build_url(
 		self, path: str, query_params: Dict[str, str] = None
