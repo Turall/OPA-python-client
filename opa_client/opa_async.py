@@ -50,9 +50,6 @@ class AsyncOpaClient:
 		headers: Optional[dict] = None,
 		timeout: float = 1.5,
 	):
-		if not isinstance(port, int):
-			raise TypeError("The port must be an integer")
-
 		self.host = host.strip()
 		self.port = port
 		self.version = version
@@ -221,9 +218,8 @@ class AsyncOpaClient:
 		) as response:
 			if response.status == 200:
 				return True
-			else:
-				error = await response.json()
-				raise RegoParseError(error.get("code"), error.get("message"))
+			error = await response.json()
+			raise RegoParseError(error.get("code"), error.get("message"))
 
 	async def update_policy_from_file(
 		self, filepath: str, endpoint: str
