@@ -1,5 +1,5 @@
 import asyncio
-import json
+import warnings
 import os
 import ssl
 from typing import Dict, Optional, Union
@@ -422,6 +422,11 @@ class AsyncOpaClient:
 		Returns:
 		    dict: The result of the permission check.
 		"""
+		warnings.warn(
+					"check_permission is deprecated and will be removed in a future release. Use `query_rule` instead.",
+					DeprecationWarning,
+					stacklevel=2
+				)
 		policy = await self.get_policy(policy_name)
 		ast = policy.get("result", {}).get("ast", {})
 		package_path = "/".join(

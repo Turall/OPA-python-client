@@ -1,5 +1,6 @@
 import os
 import threading
+import warnings
 from typing import Dict, Optional
 from urllib.parse import urlencode
 
@@ -391,6 +392,11 @@ class OpaClient(BaseClient):
 		Returns:
 		    dict: The result of the permission check.
 		"""
+		warnings.warn(
+			"check_permission is deprecated and will be removed in a future release. Use `query_rule` instead.",
+			DeprecationWarning,
+			stacklevel=2
+    	)
 		policy = self.get_policy(policy_name)
 		ast = policy.get("result", {}).get("ast", {})
 		package_path = "/".join(
