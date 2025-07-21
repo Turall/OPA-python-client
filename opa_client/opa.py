@@ -9,15 +9,15 @@ from urllib3.util.retry import Retry
 
 from .base import BaseClient
 from .errors import (
-    CheckPermissionError,
-    ConnectionsError,
-    DeleteDataError,
-    DeletePolicyError,
-    FileError,
-    PathNotFoundError,
-    PolicyNotFoundError,
-    RegoParseError,
-    TypeException,
+	CheckPermissionError,
+	ConnectionsError,
+	DeleteDataError,
+	DeletePolicyError,
+	FileError,
+	PathNotFoundError,
+	PolicyNotFoundError,
+	RegoParseError,
+	TypeException,
 )
 
 
@@ -61,7 +61,9 @@ class OpaClient(BaseClient):
 		session.mount("https://", adapter)
 
 		if self.ssl:
-			session.verify = self.cert
+			session.verify = self.ssl
+		if self.cert:
+			session.cert = self.cert
 
 		return session
 
@@ -201,7 +203,9 @@ class OpaClient(BaseClient):
 		    bool: True if the policy was successfully updated.
 		"""
 		if not os.path.isfile(filepath):
-			raise FileError("file_not_found",f"'{filepath}' is not a valid file")
+			raise FileError(
+				"file_not_found", f"'{filepath}' is not a valid file"
+			)
 
 		with open(filepath, "r", encoding="utf-8") as file:
 			policy_str = file.read()
@@ -299,7 +303,9 @@ class OpaClient(BaseClient):
 		policy_raw = policy.get("result", {}).get("raw", "")
 
 		if not policy_raw:
-			raise PolicyNotFoundError("resource_not_found", "Policy content is empty")
+			raise PolicyNotFoundError(
+				"resource_not_found", "Policy content is empty"
+			)
 
 		full_path = os.path.join(path or "", filename)
 
@@ -308,7 +314,9 @@ class OpaClient(BaseClient):
 				file.write(policy_raw)
 			return True
 		except OSError as e:
-			raise PathNotFoundError("path_not_found", f"Failed to write to '{full_path}'") from e
+			raise PathNotFoundError(
+				"path_not_found", f"Failed to write to '{full_path}'"
+			) from e
 
 	def get_policy(self, policy_name: str) -> dict:
 		"""
@@ -394,7 +402,8 @@ class OpaClient(BaseClient):
 
 		if rule_name not in rules:
 			raise CheckPermissionError(
-				"resource_not_found", f"Rule '{rule_name}' not found in policy '{policy_name}'"
+				"resource_not_found",
+				f"Rule '{rule_name}' not found in policy '{policy_name}'",
 			)
 
 		url = f"{self.root_url}/{package_path}/{rule_name}"
