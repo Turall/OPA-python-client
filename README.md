@@ -354,31 +354,7 @@ await client.delete_data('users')
 
 #### Check Permission (Policy Evaluation)
 
-You can evaluate policies with input data using `check_permission`.
-
-- **Synchronous**:
-
-```python
-input_data = {"user": "admin"}
-policy_name = 'example_policy'
-rule_name = 'allow'
-
-result = client.check_permission(input_data, policy_name, rule_name)
-print(result)
-```
-
-- **Asynchronous**:
-
-```python
-input_data = {"user": "admin"}
-policy_name = 'example_policy'
-rule_name = 'allow'
-
-result = await client.check_permission(input_data, policy_name, rule_name)
-print(result)
-```
-
-Queries a package rule with the given input data
+Evaluate a rule from a known package path. This is the **recommended method** for evaluating OPA decisions.
 
 ```python
 
@@ -421,6 +397,39 @@ await client.update_policy_from_string(rego, "test")
 print(await client.query_rule(input_data=check_data, package_path="play", rule_name="hello")) # {'result': True}
 
 ```
+
+You can evaluate policies with input data using `check_permission`.
+### ⚠️ Deprecated: `check_permission()`
+
+This method introspects the policy AST to construct a query path dynamically. It introduces unnecessary overhead and is **not recommended** for production use.
+
+- **Synchronous**:
+
+```python
+input_data = {"user": "admin"}
+policy_name = 'example_policy'
+rule_name = 'allow'
+
+result = client.check_permission(input_data, policy_name, rule_name)
+print(result)
+```
+> 🔥 Prefer `query_rule()` instead for better performance and maintainability.
+
+### ⚠️ Deprecated: `check_permission()`
+
+- **Asynchronous**:
+
+```python
+input_data = {"user": "admin"}
+policy_name = 'example_policy'
+rule_name = 'allow'
+
+result = await client.check_permission(input_data, policy_name, rule_name)
+print(result)
+```
+> 🔥 Prefer `query_rule()` instead for better performance and maintainability.
+
+
 
 ### Ad-hoc Queries
 

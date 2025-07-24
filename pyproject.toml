@@ -25,6 +25,7 @@ python = "^3.9"
 requests = "^2.32.3"
 aiohttp = {extras = ["speedups"], version = "^3.10.9"}
 aiofiles = "^24.1.0"
+urllib3 = "^2.5.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.3"
