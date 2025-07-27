@@ -11,7 +11,7 @@ def create_opa_client(async_mode=False, *args, **kwargs):
 		return OpaClient(*args, **kwargs)
 
 
-__version__ = "2.0.2"
+__version__ = "2.0.3"
 __author__ = "Tural Muradov"
 __license__ = "MIT"
 
