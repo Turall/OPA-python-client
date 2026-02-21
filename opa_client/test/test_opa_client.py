@@ -6,9 +6,7 @@ import requests
 from opa_client import create_opa_client
 from opa_client.errors import (
 	ConnectionsError,
-	DeleteDataError,
 	DeletePolicyError,
-	PolicyNotFoundError,
 	RegoParseError,
 )
 
