@@ -159,7 +159,7 @@ package example
 
 default allow = false
 
-allow {
+allow if {
     input.user == "admin"
 }
 '''
@@ -172,6 +172,11 @@ client.update_policy_from_string(policy_content, policy_name)
 ```python
 await client.update_policy_from_string(policy_content, policy_name)
 ```
+
+**OPA 1.0+ compatibility:** Policies should use Rego v1 syntax (`allow if { ... }`).
+The client accepts legacy v0 policies as well — when uploading to OPA 1.0+, it
+automatically upgrades common v0 constructs and retries. Disable this with
+`rego_compat=False` on `update_policy_from_string`.
 
 Or from url:
 

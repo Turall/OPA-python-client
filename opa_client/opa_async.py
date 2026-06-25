@@ -17,8 +17,12 @@ from .errors import (
 	FileError,
 	PathNotFoundError,
 	PolicyNotFoundError,
-	RegoParseError,
 	TypeException,
+)
+from .rego_compat import (
+	is_v0_rego_syntax_error,
+	prepare_policy_for_upload,
+	raise_rego_parse_error,
 )
 
 
@@ -195,7 +199,7 @@ class AsyncOpaClient:
 			return policies_info
 
 	async def update_policy_from_string(
-		self, new_policy: str, endpoint: str
+		self, new_policy: str, endpoint: str, rego_compat: bool = True
 	) -> bool:
 		"""
 		Update OPA policy using a policy string.
@@ -203,6 +207,8 @@ class AsyncOpaClient:
 		Parameters:
 		    new_policy (str): The new policy in Rego language.
 		    endpoint (str): The policy endpoint in OPA.
+		    rego_compat (bool): When True, automatically upgrade common v0 Rego
+		        syntax for OPA 1.0+ if the initial upload is rejected.
 
 		Returns:
 		    bool: True if the policy was successfully updated.
@@ -214,12 +220,27 @@ class AsyncOpaClient:
 		headers = self.headers.copy() if self.headers else {}
 		headers["Content-Type"] = "text/plain"
 		async with self._session.put(
-			url, data=new_policy.encode("utf-8"), headers=self.headers
+			url, data=new_policy.encode("utf-8"), headers=headers
 		) as response:
 			if response.status == 200:
 				return True
+
 			error = await response.json()
-			raise RegoParseError(error.get("code"), error.get("message"))
+			for upgraded in prepare_policy_for_upload(
+				new_policy, error, rego_compat
+			):
+				async with self._session.put(
+					url,
+					data=upgraded.encode("utf-8"),
+					headers=headers,
+				) as retry_response:
+					if retry_response.status == 200:
+						return True
+					error = await retry_response.json()
+					if not is_v0_rego_syntax_error(error):
+						break
+
+			raise_rego_parse_error(error)
 
 	async def update_policy_from_file(
 		self, filepath: str, endpoint: str
@@ -285,8 +306,7 @@ class AsyncOpaClient:
 			if response.status == 204:
 				return True
 			else:
-				error = await response.json()
-				raise RegoParseError(error.get("code"), error.get("message"))
+				self._raise_rego_parse_error(await response.json())
 
 	async def get_data(
 		self, data_name: str = "", query_params: Dict[str, bool] = None

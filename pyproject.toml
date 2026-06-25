@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "opa-python-client"
-version = "2.0.4"
+version = "2.0.5"
 description = "Client for connection to the OPA service"
 authors = ["Tural Muradov <tural.muradoov@gmail.com>"]
 license = "MIT"
@@ -22,9 +22,9 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.10"
-aiohttp = {extras = ["speedups"], version = "^3.13.3"}
-requests = "^2.32.5"
-urllib3 = "^2.6.3"
+aiohttp = {extras = ["speedups"], version = "^3.14.1"}
+requests = "^2.34.2"
+urllib3 = "^2.7.0"
 aiofiles = "^25.1.0"
 
 [tool.poetry.group.dev.dependencies]

@@ -6,6 +6,7 @@ from .errors import (
 	FileError,
 	PathNotFoundError,
 )
+from .rego_compat import prepare_policy_for_upload, raise_rego_parse_error
 
 
 class BaseClient:
@@ -43,6 +44,14 @@ class BaseClient:
 		self.headers = headers
 
 		self._session = None  # Will be initialized in the subclass
+
+	def _raise_rego_parse_error(self, error: dict) -> None:
+		raise_rego_parse_error(error)
+
+	def _prepare_policy_for_upload(
+		self, policy: str, error: dict, rego_compat: bool
+	) -> list[str]:
+		return prepare_policy_for_upload(policy, error, rego_compat)
 
 	def _build_url(
 		self, path: str, query_params: Dict[str, str] = None
@@ -91,7 +100,7 @@ class BaseClient:
 		raise NotImplementedError
 
 	def update_policy_from_string(
-		self, new_policy: str, endpoint: str
+		self, new_policy: str, endpoint: str, rego_compat: bool = True
 	) -> bool:
 		raise NotImplementedError
 

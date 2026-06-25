@@ -25,4 +25,9 @@ $ docker run -it --rm -p 8181:8181 openpolicyagent/opa run --server --addr :8181
 $ pytest
 ```
 
+Integration tests require a running OPA server. The client supports both OPA 0.x
+and OPA 1.0+; legacy v0 Rego policies are auto-upgraded on upload when needed.
+
+To run OPA in legacy v0 mode instead, add `--v0-compatible` to the docker command.
+
 NOTE: Be sure to merge the latest from "upstream" before making a pull request!

@@ -9,6 +9,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from .base import BaseClient
+from .rego_compat import is_v0_rego_syntax_error
 from .errors import (
 	CheckPermissionError,
 	ConnectionsError,
@@ -17,7 +18,6 @@ from .errors import (
 	FileError,
 	PathNotFoundError,
 	PolicyNotFoundError,
-	RegoParseError,
 	TypeException,
 )
 
@@ -163,7 +163,7 @@ class OpaClient(BaseClient):
 		return policies_info
 
 	def update_policy_from_string(
-		self, new_policy: str, endpoint: str
+		self, new_policy: str, endpoint: str, rego_compat: bool = True
 	) -> bool:
 		"""
 		Update OPA policy using a policy string.
@@ -171,6 +171,8 @@ class OpaClient(BaseClient):
 		Parameters:
 		    new_policy (str): The new policy in Rego language.
 		    endpoint (str): The policy endpoint in OPA.
+		    rego_compat (bool): When True, automatically upgrade common v0 Rego
+		        syntax for OPA 1.0+ if the initial upload is rejected.
 
 		Returns:
 		    bool: True if the policy was successfully updated.
@@ -188,9 +190,24 @@ class OpaClient(BaseClient):
 
 		if response.status_code == 200:
 			return True
-		else:
+
+		error = response.json()
+		for upgraded in self._prepare_policy_for_upload(
+			new_policy, error, rego_compat
+		):
+			response = self._session.put(
+				url,
+				data=upgraded.encode("utf-8"),
+				headers={"Content-Type": "text/plain"},
+				timeout=self.timeout,
+			)
+			if response.status_code == 200:
+				return True
 			error = response.json()
-			raise RegoParseError(error.get("code"), error.get("message"))
+			if not is_v0_rego_syntax_error(error):
+				break
+
+		self._raise_rego_parse_error(error)
 
 	def update_policy_from_file(self, filepath: str, endpoint: str) -> bool:
 		"""
@@ -254,8 +271,7 @@ class OpaClient(BaseClient):
 		if response.status_code == 204:
 			return True
 		else:
-			error = response.json()
-			raise RegoParseError(error.get("code"), error.get("message"))
+			self._raise_rego_parse_error(response.json())
 
 	def get_data(
 		self, data_name: str = "", query_params: Dict[str, bool] = None

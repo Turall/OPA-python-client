@@ -65,6 +65,33 @@ class TestOpaClient(unittest.TestCase):
 		mock_put.assert_called_once()
 
 	@patch("requests.Session.put")
+	def test_update_policy_from_string_v0_auto_upgrade(self, mock_put):
+		v0_error_response = Mock()
+		v0_error_response.status_code = 400
+		v0_error_response.json.return_value = {
+			"code": "invalid_parameter",
+			"message": "error(s) occurred while compiling module(s)",
+			"errors": [
+				{
+					"message": "`if` keyword is required before rule body",
+				}
+			],
+		}
+		success_response = Mock()
+		success_response.status_code = 200
+		mock_put.side_effect = [v0_error_response, success_response]
+
+		new_policy = "package example\n\nallow {\n    true\n}\n"
+		result = self.client.update_policy_from_string(new_policy, "example")
+		self.assertTrue(result)
+		self.assertEqual(mock_put.call_count, 2)
+		upgraded_payload = mock_put.call_args_list[1].kwargs["data"].decode(
+			"utf-8"
+		)
+		self.assertIn("allow if {", upgraded_payload)
+		self.assertNotIn("import rego.v1", upgraded_payload)
+
+	@patch("requests.Session.put")
 	def test_update_policy_from_string_failure(self, mock_put):
 		mock_response = Mock()
 		mock_response.status_code = 400
