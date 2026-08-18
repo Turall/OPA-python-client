@@ -477,11 +477,12 @@ class OpaClient(BaseClient):
 		    dict: The result of the query.
 		"""
 		url = f"{self.schema}{self.host}:{self.port}/v1/query"
-		params = {"q": query}
-		payload = {"input": input_data} if input_data else None
+		payload = {"query": query}
+		if input_data:
+			payload["input"] = input_data
 
-		response = self._session.get(
-			url, params=params, json=payload, timeout=self.timeout
+		response = self._session.post(
+			url, json=payload, timeout=self.timeout
 		)
 		response.raise_for_status()
 		return response.json()

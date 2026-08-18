@@ -256,7 +256,9 @@ class AsyncOpaClient:
 		    bool: True if the policy was successfully updated.
 		"""
 		if not os.path.isfile(filepath):
-			raise FileError(f"'{filepath}' is not a valid file")
+			raise FileError(
+				"file_not_found", f"'{filepath}' is not a valid file"
+			)
 
 		async with aiofiles.open(filepath, "r", encoding="utf-8") as file:
 			policy_str = await file.read()
@@ -354,7 +356,9 @@ class AsyncOpaClient:
 		policy_raw = policy.get("result", {}).get("raw", "")
 
 		if not policy_raw:
-			raise PolicyNotFoundError("Policy content is empty")
+			raise PolicyNotFoundError(
+				"resource_not_found", "Policy content is empty"
+			)
 
 		full_path = os.path.join(path or "", filename)
 
@@ -363,7 +367,9 @@ class AsyncOpaClient:
 				await file.write(policy_raw)
 			return True
 		except OSError as e:
-			raise PathNotFoundError(f"Failed to write to '{full_path}'") from e
+			raise PathNotFoundError(
+				"path_not_found", f"Failed to write to '{full_path}'"
+			) from e
 
 	async def get_policy(self, policy_name: str) -> dict:
 		"""
@@ -458,10 +464,11 @@ class AsyncOpaClient:
 
 		if rule_name not in rules:
 			raise CheckPermissionError(
-				f"Rule '{rule_name}' not found in policy '{policy_name}'"
+				"resource_not_found",
+				f"Rule '{rule_name}' not found in policy '{policy_name}'",
 			)
 
-		url = f"{self.root_url}/data/{package_path}/{rule_name}"
+		url = f"{self.root_url}/{package_path}/{rule_name}"
 		if query_params:
 			url = f"{url}?{urlencode(query_params)}"
 
@@ -511,12 +518,11 @@ class AsyncOpaClient:
 		    dict: The result of the query.
 		"""
 		url = f"{self.schema}{self.host}:{self.port}/v1/query"
-		params = {"q": query}
-		payload = {"input": input_data} if input_data else None
+		payload = {"query": query}
+		if input_data:
+			payload["input"] = input_data
 
-		async with self._session.post(
-			url, params=params, json=payload
-		) as response:
+		async with self._session.post(url, json=payload) as response:
 			response.raise_for_status()
 			return await response.json()
 
