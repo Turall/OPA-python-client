@@ -1,11 +1,5 @@
-import os
 from typing import Dict, Optional, Union
-from urllib.parse import urlencode
 
-from .errors import (
-	FileError,
-	PathNotFoundError,
-)
 from .rego_compat import prepare_policy_for_upload, raise_rego_parse_error
 
 
@@ -52,31 +46,6 @@ class BaseClient:
 		self, policy: str, error: dict, rego_compat: bool
 	) -> list[str]:
 		return prepare_policy_for_upload(policy, error, rego_compat)
-
-	def _build_url(
-		self, path: str, query_params: Dict[str, str] = None
-	) -> str:
-		url = f"{self.root_url}/{path.lstrip('/')}"
-		if query_params:
-			url = f"{url}?{urlencode(query_params)}"
-		return url
-
-	def _load_policy_from_file(self, filepath: str) -> str:
-		if not os.path.isfile(filepath):
-			raise FileError(f"'{filepath}' is not a valid file")
-		with open(filepath, "r", encoding="utf-8") as file:
-			return file.read()
-
-	def _save_policy_to_file(
-		self, policy_raw: str, path: Optional[str], filename: str
-	) -> bool:
-		full_path = os.path.join(path or "", filename)
-		try:
-			with open(full_path, "w", encoding="utf-8") as file:
-				file.write(policy_raw)
-			return True
-		except OSError as e:
-			raise PathNotFoundError(f"Failed to write to '{full_path}'") from e
 
 	# Abstract methods to be implemented in subclasses
 	def close_connection(self):

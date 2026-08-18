@@ -12,8 +12,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   Compile API (`POST /v1/compile`), enabling partial evaluation of a query against
   a chosen set of unknowns (e.g. compiling a policy into a residual filter for
   use with `data.reports`-style authorization-as-filter patterns).
+- `AsyncOpaClient` now retries requests on connection errors and on `500`/`502`/`504`
+  responses, honoring the `retries` option the same way the sync client's
+  `urllib3.Retry`-backed session already did.
+
+### Changed
+
+- `AsyncOpaClient` now inherits from `BaseClient`, removing ~70 lines of duplicated
+  property boilerplate and sharing the Rego-compat helper methods with the sync client.
 
 ### Fixed
+
+- `AsyncOpaClient.update_or_create_data` raised `AttributeError` instead of
+  `RegoParseError` on a `400` response, because `AsyncOpaClient` did not inherit
+  `BaseClient` and therefore lacked `_raise_rego_parse_error`.
 
 - `AsyncOpaClient.check_permission` sent requests to a duplicated `/v1/data/data/...`
   endpoint (the AST-derived package path already includes a leading `data` segment),

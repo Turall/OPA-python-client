@@ -2,10 +2,7 @@ import unittest
 
 from opa_client.errors import (
 	ConnectionsError,
-	DeleteDataError,
-	DeletePolicyError,
 	PolicyNotFoundError,
-	RegoParseError,
 )
 from opa_client.opa import OpaClient
 

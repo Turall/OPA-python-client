@@ -1,14 +1,16 @@
 import asyncio
-import warnings
 import os
 import ssl
-from typing import Dict, Optional, Union
+import warnings
+from contextlib import asynccontextmanager
+from typing import Dict, Optional
 from urllib.parse import urlencode
 
 import aiofiles
 import aiohttp
 from aiohttp import ClientSession, TCPConnector
 
+from .base import BaseClient
 from .errors import (
 	CheckPermissionError,
 	ConnectionsError,
@@ -19,14 +21,13 @@ from .errors import (
 	PolicyNotFoundError,
 	TypeException,
 )
-from .rego_compat import (
-	is_v0_rego_syntax_error,
-	prepare_policy_for_upload,
-	raise_rego_parse_error,
-)
+from .rego_compat import is_v0_rego_syntax_error
+
+_RETRYABLE_STATUS_CODES = frozenset({500, 502, 504})
+_BACKOFF_FACTOR = 0.3
 
 
-class AsyncOpaClient:
+class AsyncOpaClient(BaseClient):
 	"""
 	AsyncOpaClient client object to connect and manipulate OPA service asynchronously.
 
@@ -37,6 +38,7 @@ class AsyncOpaClient:
 	    ssl (bool): Verify SSL certificates for HTTPS requests, defaults to False.
 	    cert (Optional[str] or Tuple[str, str]): Path to client certificate or a tuple of (cert_file, key_file).
 	    headers (Optional[dict]): Dictionary of headers to send, defaults to None.
+	    retries (int): Number of retries for failed requests, defaults to 2.
 	    timeout (float): Timeout for requests in seconds, defaults to 1.5.
 
 	Example:
@@ -44,28 +46,8 @@ class AsyncOpaClient:
 	        await client.check_connection()
 	"""
 
-	def __init__(
-		self,
-		host: str = "localhost",
-		port: int = 8181,
-		version: str = "v1",
-		ssl: bool = False,
-		cert: Optional[Union[str, tuple]] = None,
-		headers: Optional[dict] = None,
-		timeout: float = 1.5,
-	):
-		self.host = host.strip()
-		self.port = port
-		self.version = version
-		self.ssl = ssl
-		self.cert = cert
-		self.timeout = timeout
-
-		self.schema = "https://" if ssl else "http://"
-		self.root_url = f"{self.schema}{self.host}:{self.port}/{self.version}"
-
-		self.headers = headers
-
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
 		# Initialize the session attributes
 		self._session: Optional[ClientSession] = None
 		self._connector = None  # Will be initialized in _init_session
@@ -103,6 +85,36 @@ class AsyncOpaClient:
 			timeout=aiohttp.ClientTimeout(total=self.timeout),
 		)
 
+	@asynccontextmanager
+	async def _request(self, method: str, url: str, **kwargs):
+		"""
+		Perform an HTTP request, retrying on connection errors and on
+		503/502/504 responses, matching the sync client's retry behavior.
+		"""
+		attempt = 0
+		while True:
+			try:
+				response = await self._session.request(
+					method, url, **kwargs
+				)
+			except aiohttp.ClientConnectionError:
+				if attempt >= self.retries:
+					raise
+			else:
+				if (
+					response.status not in _RETRYABLE_STATUS_CODES
+					or attempt >= self.retries
+				):
+					try:
+						yield response
+					finally:
+						await response.release()
+					return
+				await response.release()
+
+			attempt += 1
+			await asyncio.sleep(_BACKOFF_FACTOR * (2 ** (attempt - 1)))
+
 	async def close_connection(self):
 		"""Close the session and release any resources."""
 		if self._session and not self._session.closed:
@@ -119,7 +131,7 @@ class AsyncOpaClient:
 		"""
 		url = f"{self.root_url}/policies/"
 		try:
-			async with self._session.get(url) as response:
+			async with self._request("GET", url) as response:
 				if response.status == 200:
 					return True
 				else:
@@ -148,7 +160,7 @@ class AsyncOpaClient:
 		if query:
 			url = f"{url}?{urlencode(query)}"
 		try:
-			async with self._session.get(url) as response:
+			async with self._request("GET", url) as response:
 				return response.status == 200
 		except Exception:
 			return False
@@ -156,7 +168,7 @@ class AsyncOpaClient:
 	async def get_policies_list(self) -> list:
 		"""Returns all OPA policies in the service."""
 		url = f"{self.root_url}/policies/"
-		async with self._session.get(url) as response:
+		async with self._request("GET", url) as response:
 			response.raise_for_status()
 			policies = await response.json()
 			result = policies.get("result", [])
@@ -168,7 +180,7 @@ class AsyncOpaClient:
 		policy path and policy rules.
 		"""
 		url = f"{self.root_url}/policies/"
-		async with self._session.get(url) as response:
+		async with self._request("GET", url) as response:
 			response.raise_for_status()
 			policies = await response.json()
 			result = policies.get("result", [])
@@ -219,17 +231,18 @@ class AsyncOpaClient:
 		url = f"{self.root_url}/policies/{endpoint}"
 		headers = self.headers.copy() if self.headers else {}
 		headers["Content-Type"] = "text/plain"
-		async with self._session.put(
-			url, data=new_policy.encode("utf-8"), headers=headers
+		async with self._request(
+			"PUT", url, data=new_policy.encode("utf-8"), headers=headers
 		) as response:
 			if response.status == 200:
 				return True
 
 			error = await response.json()
-			for upgraded in prepare_policy_for_upload(
+			for upgraded in self._prepare_policy_for_upload(
 				new_policy, error, rego_compat
 			):
-				async with self._session.put(
+				async with self._request(
+					"PUT",
 					url,
 					data=upgraded.encode("utf-8"),
 					headers=headers,
@@ -240,7 +253,7 @@ class AsyncOpaClient:
 					if not is_v0_rego_syntax_error(error):
 						break
 
-			raise_rego_parse_error(error)
+			self._raise_rego_parse_error(error)
 
 	async def update_policy_from_file(
 		self, filepath: str, endpoint: str
@@ -302,8 +315,8 @@ class AsyncOpaClient:
 		url = f"{self.root_url}/data/{endpoint}"
 		headers = self.headers.copy() if self.headers else {}
 		headers["Content-Type"] = "application/json"
-		async with self._session.put(
-			url, json=new_data, headers=headers
+		async with self._request(
+			"PUT", url, json=new_data, headers=headers
 		) as response:
 			if response.status == 204:
 				return True
@@ -326,7 +339,7 @@ class AsyncOpaClient:
 		url = f"{self.root_url}/data/{data_name}"
 		if query_params:
 			url = f"{url}?{urlencode(query_params)}"
-		async with self._session.get(url) as response:
+		async with self._request("GET", url) as response:
 			if response.status == 200:
 				return await response.json()
 			else:
@@ -382,7 +395,7 @@ class AsyncOpaClient:
 		    dict: The policy data.
 		"""
 		url = f"{self.root_url}/policies/{policy_name}"
-		async with self._session.get(url) as response:
+		async with self._request("GET", url) as response:
 			if response.status == 200:
 				return await response.json()
 			else:
@@ -402,7 +415,7 @@ class AsyncOpaClient:
 		    bool: True if the policy was successfully deleted.
 		"""
 		url = f"{self.root_url}/policies/{policy_name}"
-		async with self._session.delete(url) as response:
+		async with self._request("DELETE", url) as response:
 			if response.status == 200:
 				return True
 			else:
@@ -422,7 +435,7 @@ class AsyncOpaClient:
 		    bool: True if the data was successfully deleted.
 		"""
 		url = f"{self.root_url}/data/{data_name}"
-		async with self._session.delete(url) as response:
+		async with self._request("DELETE", url) as response:
 			if response.status == 204:
 				return True
 			else:
@@ -449,10 +462,10 @@ class AsyncOpaClient:
 		    dict: The result of the permission check.
 		"""
 		warnings.warn(
-					"check_permission is deprecated and will be removed in a future release. Use `query_rule` instead.",
-					DeprecationWarning,
-					stacklevel=2
-				)
+			"check_permission is deprecated and will be removed in a future release. Use `query_rule` instead.",
+			DeprecationWarning,
+			stacklevel=2,
+		)
 		policy = await self.get_policy(policy_name)
 		ast = policy.get("result", {}).get("ast", {})
 		package_path = "/".join(
@@ -472,8 +485,8 @@ class AsyncOpaClient:
 		if query_params:
 			url = f"{url}?{urlencode(query_params)}"
 
-		async with self._session.post(
-			url, json={"input": input_data}
+		async with self._request(
+			"POST", url, json={"input": input_data}
 		) as response:
 			response.raise_for_status()
 			return await response.json()
@@ -500,8 +513,8 @@ class AsyncOpaClient:
 			path = f"{path}/{rule_name}"
 		url = f"{self.root_url}/data/{path}"
 
-		async with self._session.post(
-			url, json={"input": input_data}
+		async with self._request(
+			"POST", url, json={"input": input_data}
 		) as response:
 			response.raise_for_status()
 			return await response.json()
@@ -522,7 +535,7 @@ class AsyncOpaClient:
 		if input_data:
 			payload["input"] = input_data
 
-		async with self._session.post(url, json=payload) as response:
+		async with self._request("POST", url, json=payload) as response:
 			response.raise_for_status()
 			return await response.json()
 
@@ -559,84 +572,9 @@ class AsyncOpaClient:
 		if options:
 			payload["options"] = options
 
-		async with self._session.post(url, json=payload) as response:
+		async with self._request("POST", url, json=payload) as response:
 			response.raise_for_status()
 			return await response.json()
-
-	# Property methods for read-only access to certain attributes
-	@property
-	def host(self) -> str:
-		return self._host
-
-	@host.setter
-	def host(self, value: str):
-		self._host = value
-
-	@property
-	def port(self) -> int:
-		return self._port
-
-	@port.setter
-	def port(self, value: int):
-		if not isinstance(value, int):
-			raise TypeError("Port must be an integer")
-		self._port = value
-
-	@property
-	def version(self) -> str:
-		return self._version
-
-	@version.setter
-	def version(self, value: str):
-		self._version = value
-
-	@property
-	def schema(self) -> str:
-		return self._schema
-
-	@schema.setter
-	def schema(self, value: str):
-		self._schema = value
-
-	@property
-	def root_url(self) -> str:
-		return self._root_url
-
-	@root_url.setter
-	def root_url(self, value: str):
-		self._root_url = value
-
-	@property
-	def ssl(self) -> bool:
-		return self._ssl
-
-	@ssl.setter
-	def ssl(self, value: bool):
-		self._ssl = value
-
-	@property
-	def cert(self) -> Optional[str]:
-		return self._cert
-
-	@cert.setter
-	def cert(self, value: Optional[str]):
-		self._cert = value
-
-	@property
-	def headers(self) -> dict:
-		return self._headers
-
-	@headers.setter
-	def headers(self, value: dict):
-		self._headers = value
-
-	@property
-	def timeout(self) -> float:
-		return self._timeout
-
-	@timeout.setter
-	def timeout(self, value: float):
-		self._timeout = value
 
 
 # Example usage:
