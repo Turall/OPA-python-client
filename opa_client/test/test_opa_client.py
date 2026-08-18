@@ -132,6 +132,25 @@ class TestOpaClient(unittest.TestCase):
 			self.client.delete_policy("nonexistent_policy")
 		mock_delete.assert_called_once()
 
+	@patch("requests.Session.post")
+	def test_compile_query(self, mock_post):
+		mock_response = Mock()
+		mock_response.status_code = 200
+		mock_response.json.return_value = {"result": {"queries": [[]]}}
+		mock_post.return_value = mock_response
+
+		result = self.client.compile_query(
+			"data.example.allow == true",
+			input_data={"user": {"role": "admin"}},
+			unknowns=[],
+		)
+		self.assertEqual(result, {"result": {"queries": [[]]}})
+		mock_post.assert_called_once()
+		payload = mock_post.call_args.kwargs["json"]
+		self.assertEqual(payload["query"], "data.example.allow == true")
+		self.assertEqual(payload["input"], {"user": {"role": "admin"}})
+		self.assertEqual(payload["unknowns"], [])
+
 	# Add more test methods to cover other functionalities
 
 

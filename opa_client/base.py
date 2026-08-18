@@ -154,3 +154,12 @@ class BaseClient:
 
 	def ad_hoc_query(self, query: str, input_data: dict = None) -> dict:
 		raise NotImplementedError
+
+	def compile_query(
+		self,
+		query: str,
+		input_data: dict = None,
+		unknowns: Optional[list] = None,
+		options: Optional[dict] = None,
+	) -> dict:
+		raise NotImplementedError

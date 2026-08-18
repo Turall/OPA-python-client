@@ -116,6 +116,41 @@ class TestIntegrationOpaClient(unittest.TestCase):
 		# Clean up
 		self.client.delete_policy(policy_name)
 
+	def test_compile_query(self):
+		# Define a sample policy
+		policy_name = "authz_compile"
+		policy_content = """
+        package authz_compile
+
+        default allow = false
+
+        allow {
+            input.user.role == "admin"
+        }
+        """
+		self.client.update_policy_from_string(policy_content, policy_name)
+
+		# Fully resolved query: input is fully known, so the compiler
+		# should reduce the query to unconditionally true.
+		resolved = self.client.compile_query(
+			"data.authz_compile.allow == true",
+			input_data={"user": {"role": "admin"}},
+			unknowns=[],
+		)
+		self.assertEqual(resolved["result"], {"queries": [[]]})
+
+		# Partial evaluation: leave input.user.role unknown so the
+		# compiler returns a residual expression instead of a boolean.
+		partial = self.client.compile_query(
+			"data.authz_compile.allow == true",
+			unknowns=["input.user.role"],
+		)
+		self.assertIn("queries", partial["result"])
+		self.assertTrue(partial["result"]["queries"])
+
+		# Clean up
+		self.client.delete_policy(policy_name)
+
 	# Add more integration tests as needed
 
 

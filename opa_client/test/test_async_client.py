@@ -111,6 +111,27 @@ class TestAsyncOpaClient(unittest.IsolatedAsyncioTestCase):
 			await self.client.delete_policy("nonexistent_policy")
 		mock_delete.assert_called_once()
 
+	@patch("aiohttp.ClientSession.post")
+	async def test_compile_query(self, mock_post):
+		mock_response = AsyncMock()
+		mock_response.raise_for_status = Mock()
+		mock_response.json = AsyncMock(
+			return_value={"result": {"queries": [[]]}}
+		)
+		mock_post.return_value.__aenter__.return_value = mock_response
+
+		result = await self.client.compile_query(
+			"data.example.allow == true",
+			input_data={"user": {"role": "admin"}},
+			unknowns=[],
+		)
+		self.assertEqual(result, {"result": {"queries": [[]]}})
+		mock_post.assert_called_once()
+		payload = mock_post.call_args.kwargs["json"]
+		self.assertEqual(payload["query"], "data.example.allow == true")
+		self.assertEqual(payload["input"], {"user": {"role": "admin"}})
+		self.assertEqual(payload["unknowns"], [])
+
 	# Add more test methods to cover other functionalities
 
 

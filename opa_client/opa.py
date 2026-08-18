@@ -487,6 +487,45 @@ class OpaClient(BaseClient):
 		response.raise_for_status()
 		return response.json()
 
+	def compile_query(
+		self,
+		query: str,
+		input_data: dict = None,
+		unknowns: Optional[list] = None,
+		options: Optional[dict] = None,
+	) -> dict:
+		"""
+		Partially evaluate and compile a query using the Compile API.
+
+		Parameters:
+		    query (str): The query to partially evaluate and compile.
+		    input_data (dict, optional): The input document to use during
+		        partial evaluation.
+		    unknowns (list, optional): The terms to treat as unknown during
+		        partial evaluation. Defaults to OPA's default of ["input"].
+		    options (dict, optional): Compile options, e.g.
+		        {"disableInlining": [...]}.
+
+		Returns:
+		    dict: The compile result, containing a "result" key with the
+		        partially evaluated queries (or an empty dict if the query
+		        is unconditionally false).
+		"""
+		url = f"{self.root_url}/compile"
+		payload = {"query": query}
+		if input_data:
+			payload["input"] = input_data
+		if unknowns is not None:
+			payload["unknowns"] = unknowns
+		if options:
+			payload["options"] = options
+
+		response = self._session.post(
+			url, json=payload, timeout=self.timeout
+		)
+		response.raise_for_status()
+		return response.json()
+
 
 # Example usage:
 if __name__ == "__main__":
