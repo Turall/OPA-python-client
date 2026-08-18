@@ -5,6 +5,7 @@ from opa_client import create_opa_client
 from opa_client.errors import (
 	ConnectionsError,
 	DeletePolicyError,
+	PatchDataError,
 	RegoParseError,
 )
 
@@ -140,6 +141,73 @@ class TestAsyncOpaClient(unittest.IsolatedAsyncioTestCase):
 		result = await self.client.check_connection()
 		self.assertEqual(result, True)
 		self.assertEqual(mock_request.call_count, 2)
+
+	@patch("aiohttp.ClientSession.request", new_callable=AsyncMock)
+	async def test_get_config(self, mock_request):
+		mock_response = AsyncMock()
+		mock_response.status = 200
+		mock_response.raise_for_status = Mock()
+		mock_response.json = AsyncMock(
+			return_value={"result": {"labels": {"version": "0.68.0"}}}
+		)
+		mock_request.return_value = mock_response
+
+		result = await self.client.get_config()
+		self.assertEqual(result["result"]["labels"]["version"], "0.68.0")
+		mock_request.assert_called_once()
+
+	@patch("aiohttp.ClientSession.request", new_callable=AsyncMock)
+	async def test_get_metrics(self, mock_request):
+		mock_response = AsyncMock()
+		mock_response.status = 200
+		mock_response.raise_for_status = Mock()
+		mock_response.text = AsyncMock(
+			return_value="# HELP go_info Information.\ngo_info 1\n"
+		)
+		mock_request.return_value = mock_response
+
+		result = await self.client.get_metrics()
+		self.assertIn("go_info", result)
+		call_args = mock_request.call_args
+		self.assertTrue(call_args.args[1].endswith(":8181/metrics"))
+
+	@patch("aiohttp.ClientSession.request", new_callable=AsyncMock)
+	async def test_patch_data_success(self, mock_request):
+		mock_response = AsyncMock()
+		mock_response.status = 204
+		mock_request.return_value = mock_response
+
+		result = await self.client.patch_data(
+			"users", [{"op": "add", "path": "/a", "value": 1}]
+		)
+		self.assertTrue(result)
+		mock_request.assert_called_once()
+		call_args = mock_request.call_args
+		self.assertEqual(call_args.args[0], "PATCH")
+		self.assertEqual(
+			call_args.kwargs["json"], [{"op": "add", "path": "/a", "value": 1}]
+		)
+
+	@patch("aiohttp.ClientSession.request", new_callable=AsyncMock)
+	async def test_patch_data_failure(self, mock_request):
+		mock_response = AsyncMock()
+		mock_response.status = 404
+		mock_response.json = AsyncMock(
+			return_value={
+				"code": "resource_not_found",
+				"message": "document does not exist",
+			}
+		)
+		mock_request.return_value = mock_response
+
+		with self.assertRaises(PatchDataError):
+			await self.client.patch_data(
+				"missing", [{"op": "add", "path": "/a", "value": 1}]
+			)
+
+	async def test_patch_data_invalid_type(self):
+		with self.assertRaises(TypeError):
+			await self.client.patch_data("users", {"op": "add"})
 
 	# Add more test methods to cover other functionalities
 

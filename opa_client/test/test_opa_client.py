@@ -7,6 +7,7 @@ from opa_client import create_opa_client
 from opa_client.errors import (
 	ConnectionsError,
 	DeletePolicyError,
+	PatchDataError,
 	RegoParseError,
 )
 
@@ -150,6 +151,64 @@ class TestOpaClient(unittest.TestCase):
 		self.assertEqual(payload["query"], "data.example.allow == true")
 		self.assertEqual(payload["input"], {"user": {"role": "admin"}})
 		self.assertEqual(payload["unknowns"], [])
+
+	@patch("requests.Session.get")
+	def test_get_config(self, mock_get):
+		mock_response = Mock()
+		mock_response.status_code = 200
+		mock_response.json.return_value = {
+			"result": {"labels": {"version": "0.68.0"}}
+		}
+		mock_get.return_value = mock_response
+
+		result = self.client.get_config()
+		self.assertEqual(result["result"]["labels"]["version"], "0.68.0")
+		mock_get.assert_called_once()
+
+	@patch("requests.Session.get")
+	def test_get_metrics(self, mock_get):
+		mock_response = Mock()
+		mock_response.status_code = 200
+		mock_response.text = "# HELP go_info Information.\ngo_info 1\n"
+		mock_get.return_value = mock_response
+
+		result = self.client.get_metrics()
+		self.assertIn("go_info", result)
+		call_url = mock_get.call_args.args[0]
+		self.assertTrue(call_url.endswith(":8181/metrics"))
+
+	@patch("requests.Session.patch")
+	def test_patch_data_success(self, mock_patch):
+		mock_response = Mock()
+		mock_response.status_code = 204
+		mock_patch.return_value = mock_response
+
+		result = self.client.patch_data(
+			"users", [{"op": "add", "path": "/a", "value": 1}]
+		)
+		self.assertTrue(result)
+		mock_patch.assert_called_once()
+		payload = mock_patch.call_args.kwargs["json"]
+		self.assertEqual(payload, [{"op": "add", "path": "/a", "value": 1}])
+
+	@patch("requests.Session.patch")
+	def test_patch_data_failure(self, mock_patch):
+		mock_response = Mock()
+		mock_response.status_code = 404
+		mock_response.json.return_value = {
+			"code": "resource_not_found",
+			"message": "document does not exist",
+		}
+		mock_patch.return_value = mock_response
+
+		with self.assertRaises(PatchDataError):
+			self.client.patch_data(
+				"missing", [{"op": "add", "path": "/a", "value": 1}]
+			)
+
+	def test_patch_data_invalid_type(self):
+		with self.assertRaises(TypeError):
+			self.client.patch_data("users", {"op": "add"})
 
 	# Add more test methods to cover other functionalities
 

@@ -355,6 +355,69 @@ client.delete_data('users')
 await client.delete_data('users')
 ```
 
+#### Partially Update Data (JSON Patch)
+
+You can partially update data already stored in OPA using a [JSON Patch](https://datatracker.ietf.org/doc/html/rfc6902) (RFC 6902) document, instead of replacing the whole document with `update_or_create_data`:
+
+- **Synchronous**:
+
+```python
+client.update_or_create_data({"users": {"alice": {"role": "admin"}}}, "acl")
+
+client.patch_data("acl", [
+    {"op": "add", "path": "/users/bob", "value": {"role": "user"}},
+])
+print(client.get_data("acl"))
+# {'result': {'users': {'alice': {'role': 'admin'}, 'bob': {'role': 'user'}}}}
+```
+
+- **Asynchronous**:
+
+```python
+await client.update_or_create_data({"users": {"alice": {"role": "admin"}}}, "acl")
+
+await client.patch_data("acl", [
+    {"op": "add", "path": "/users/bob", "value": {"role": "user"}},
+])
+print(await client.get_data("acl"))
+```
+
+### Server Configuration & Metrics
+
+#### Get Server Configuration
+
+Retrieve OPA's active configuration (e.g. to check labels, decision logging, or bundle settings):
+
+- **Synchronous**:
+
+```python
+print(client.get_config())
+# {'result': {'default_decision': '/system/main', 'labels': {'id': '...', 'version': '0.68.0'}}}
+```
+
+- **Asynchronous**:
+
+```python
+print(await client.get_config())
+```
+
+#### Get Server Metrics
+
+Retrieve Prometheus-formatted performance metrics from OPA:
+
+- **Synchronous**:
+
+```python
+print(client.get_metrics())
+# '# HELP go_info Information about the Go environment.\n# TYPE go_info gauge\ngo_info{version="go1.23.0"} 1\n...'
+```
+
+- **Asynchronous**:
+
+```python
+print(await client.get_metrics())
+```
+
 ### Policy Evaluation
 
 #### Check Permission (Policy Evaluation)
@@ -488,6 +551,53 @@ result = await client.ad_hoc_query(query="data.userinfo.user_roles[name]")
 print(result) # {'result': [{'name': 'alice'}, {'name': 'bob'}, {'name': 'eve'}]}
 ```
 
+### Compile API (Partial Evaluation)
+
+Use `compile_query` to partially evaluate a query against a set of `unknowns`. If the query fully resolves given `input_data`, the result is unconditionally true/false; otherwise OPA returns a residual set of queries (e.g. usable as a filter for a downstream data store).
+
+- **Synchronous**:
+
+```python
+policy = """
+package authz
+
+default allow = false
+
+allow if {
+    input.user.role == "admin"
+}
+"""
+client.update_policy_from_string(policy, "authz")
+
+# Fully resolved: input is fully known, so the query reduces to true.
+result = client.compile_query(
+    "data.authz.allow == true",
+    input_data={"user": {"role": "admin"}},
+    unknowns=[],
+)
+print(result) # {'result': {'queries': [[]]}}
+
+# Partial evaluation: leave input.user.role unknown to get a residual query.
+partial = client.compile_query(
+    "data.authz.allow == true",
+    unknowns=["input.user.role"],
+)
+print(partial) # {'result': {'queries': [[{'index': 0, 'terms': [...]}]]}}
+```
+
+- **Asynchronous**:
+
+```python
+await client.update_policy_from_string(policy, "authz")
+
+result = await client.compile_query(
+    "data.authz.allow == true",
+    input_data={"user": {"role": "admin"}},
+    unknowns=[],
+)
+print(result) # {'result': {'queries': [[]]}}
+```
+
 ## API Reference
 
 ### Synchronous Client (OpaClient)
@@ -503,10 +613,14 @@ print(result) # {'result': [{'name': 'alice'}, {'name': 'bob'}, {'name': 'eve'}]
 - `delete_policy(policy_name)`: Delete a specific policy.
 - `update_or_create_data(data_content, data_name)`: Create or update data in OPA.
 - `get_data(data_name)`: Retrieve data from OPA.
+- `patch_data(data_name, patches)`: Partially update data using a JSON Patch (RFC 6902) document.
 - `delete_data(data_name)`: Delete data from OPA.
 - `check_permission(input_data, policy_name, rule_name)`: Evaluate a policy using input data.
 - `query_rule(input_data, package_path, rule_name)`: Query a specific rule in a package.
 - `ad_hoc_query(query, input_data)`: Run an ad-hoc query.
+- `compile_query(query, input_data, unknowns, options)`: Partially evaluate a query using the Compile API.
+- `get_config()`: Get OPA's active server configuration.
+- `get_metrics()`: Get Prometheus-formatted server performance metrics.
 
 ### Asynchronous Client (AsyncOpaClient)
 

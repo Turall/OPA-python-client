@@ -16,6 +16,7 @@ from .errors import (
 	DeleteDataError,
 	DeletePolicyError,
 	FileError,
+	PatchDataError,
 	PathNotFoundError,
 	PolicyNotFoundError,
 	TypeException,
@@ -118,6 +119,30 @@ class OpaClient(BaseClient):
 			return response.status_code == 200
 		except requests.exceptions.RequestException:
 			return False
+
+	def get_config(self) -> dict:
+		"""
+		Returns the OPA server's active configuration.
+
+		Returns:
+		    dict: The OPA configuration document.
+		"""
+		url = f"{self.root_url}/config"
+		response = self._session.get(url, timeout=self.timeout)
+		response.raise_for_status()
+		return response.json()
+
+	def get_metrics(self) -> str:
+		"""
+		Returns Prometheus-formatted performance metrics for the OPA server.
+
+		Returns:
+		    str: The raw Prometheus metrics text.
+		"""
+		url = f"{self.schema}{self.host}:{self.port}/metrics"
+		response = self._session.get(url, timeout=self.timeout)
+		response.raise_for_status()
+		return response.text
 
 	def get_policies_list(self) -> list:
 		"""Returns all OPA policies in the service."""
@@ -272,6 +297,35 @@ class OpaClient(BaseClient):
 			return True
 		else:
 			self._raise_rego_parse_error(response.json())
+
+	def patch_data(self, endpoint: str, patches: list) -> bool:
+		"""
+		Partially update OPA data using a JSON Patch (RFC 6902) document.
+
+		Parameters:
+		    endpoint (str): The data endpoint in OPA.
+		    patches (list): A list of JSON Patch operations, e.g.
+		        [{"op": "add", "path": "/a/b", "value": 1}].
+
+		Returns:
+		    bool: True if the data was successfully patched.
+		"""
+		if not isinstance(patches, list):
+			raise TypeException("patches must be a list")
+
+		url = f"{self.root_url}/data/{endpoint}"
+		response = self._session.patch(
+			url,
+			json=patches,
+			headers={"Content-Type": "application/json-patch+json"},
+			timeout=self.timeout,
+		)
+
+		if response.status_code == 204:
+			return True
+
+		error = response.json()
+		raise PatchDataError(error.get("code"), error.get("message"))
 
 	def get_data(
 		self, data_name: str = "", query_params: Dict[str, bool] = None

@@ -58,6 +58,16 @@ class DeletePolicyError(Exception):
 		self.message = message
 
 
+class PatchDataError(Exception):
+	def __init__(self, expression, message):
+		"""
+		expression -- input expression in which the error occurred
+		message -- explanation of the error
+		"""
+		self.expression = expression
+		self.message = message
+
+
 class PathNotFoundError(Exception):
 	def __init__(self, expression, message):
 		"""

@@ -82,6 +82,9 @@ class BaseClient:
 	def update_or_create_data(self, new_data: dict, endpoint: str) -> bool:
 		raise NotImplementedError
 
+	def patch_data(self, endpoint: str, patches: list) -> bool:
+		raise NotImplementedError
+
 	def get_data(
 		self, data_name: str = "", query_params: Dict[str, bool] = None
 	) -> dict:
@@ -131,4 +134,10 @@ class BaseClient:
 		unknowns: Optional[list] = None,
 		options: Optional[dict] = None,
 	) -> dict:
+		raise NotImplementedError
+
+	def get_config(self) -> dict:
+		raise NotImplementedError
+
+	def get_metrics(self) -> str:
 		raise NotImplementedError

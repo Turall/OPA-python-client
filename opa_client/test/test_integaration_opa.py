@@ -2,6 +2,7 @@ import unittest
 
 from opa_client.errors import (
 	ConnectionsError,
+	PatchDataError,
 	PolicyNotFoundError,
 )
 from opa_client.opa import OpaClient
@@ -147,6 +148,36 @@ class TestIntegrationOpaClient(unittest.TestCase):
 
 		# Clean up
 		self.client.delete_policy(policy_name)
+
+	def test_get_config(self):
+		config = self.client.get_config()
+		self.assertIn("result", config)
+		self.assertIn("labels", config["result"])
+
+	def test_get_metrics(self):
+		metrics = self.client.get_metrics()
+		self.assertIsInstance(metrics, str)
+		self.assertIn("go_info", metrics)
+
+	def test_patch_data(self):
+		data_name = "patchtest"
+		self.client.update_or_create_data({"a": {"b": 1}}, data_name)
+
+		result = self.client.patch_data(
+			data_name, [{"op": "add", "path": "/a/c", "value": 2}]
+		)
+		self.assertTrue(result)
+
+		data = self.client.get_data(data_name)
+		self.assertEqual(data["result"], {"a": {"b": 1, "c": 2}})
+
+		self.client.delete_data(data_name)
+
+		with self.assertRaises(PatchDataError):
+			self.client.patch_data(
+				"nonexistent_path",
+				[{"op": "replace", "path": "/x", "value": 1}],
+			)
 
 	# Add more integration tests as needed
 

@@ -17,6 +17,7 @@ from .errors import (
 	DeleteDataError,
 	DeletePolicyError,
 	FileError,
+	PatchDataError,
 	PathNotFoundError,
 	PolicyNotFoundError,
 	TypeException,
@@ -164,6 +165,30 @@ class AsyncOpaClient(BaseClient):
 				return response.status == 200
 		except Exception:
 			return False
+
+	async def get_config(self) -> dict:
+		"""
+		Returns the OPA server's active configuration.
+
+		Returns:
+		    dict: The OPA configuration document.
+		"""
+		url = f"{self.root_url}/config"
+		async with self._request("GET", url) as response:
+			response.raise_for_status()
+			return await response.json()
+
+	async def get_metrics(self) -> str:
+		"""
+		Returns Prometheus-formatted performance metrics for the OPA server.
+
+		Returns:
+		    str: The raw Prometheus metrics text.
+		"""
+		url = f"{self.schema}{self.host}:{self.port}/metrics"
+		async with self._request("GET", url) as response:
+			response.raise_for_status()
+			return await response.text()
 
 	async def get_policies_list(self) -> list:
 		"""Returns all OPA policies in the service."""
@@ -322,6 +347,33 @@ class AsyncOpaClient(BaseClient):
 				return True
 			else:
 				self._raise_rego_parse_error(await response.json())
+
+	async def patch_data(self, endpoint: str, patches: list) -> bool:
+		"""
+		Partially update OPA data using a JSON Patch (RFC 6902) document.
+
+		Parameters:
+		    endpoint (str): The data endpoint in OPA.
+		    patches (list): A list of JSON Patch operations, e.g.
+		        [{"op": "add", "path": "/a/b", "value": 1}].
+
+		Returns:
+		    bool: True if the data was successfully patched.
+		"""
+		if not isinstance(patches, list):
+			raise TypeException("patches must be a list")
+
+		url = f"{self.root_url}/data/{endpoint}"
+		headers = self.headers.copy() if self.headers else {}
+		headers["Content-Type"] = "application/json-patch+json"
+		async with self._request(
+			"PATCH", url, json=patches, headers=headers
+		) as response:
+			if response.status == 204:
+				return True
+
+			error = await response.json()
+			raise PatchDataError(error.get("code"), error.get("message"))
 
 	async def get_data(
 		self, data_name: str = "", query_params: Dict[str, bool] = None
