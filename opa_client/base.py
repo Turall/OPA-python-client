@@ -1,4 +1,4 @@
-from typing import Dict, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from .rego_compat import prepare_policy_for_upload, raise_rego_parse_error
 
@@ -18,6 +18,7 @@ class BaseClient:
 		ssl: bool = False,
 		cert: Optional[Union[str, tuple]] = None,
 		headers: Optional[dict] = None,
+		token: Optional[str] = None,
 		retries: int = 2,
 		timeout: float = 1.5,
 	):
@@ -35,6 +36,9 @@ class BaseClient:
 		self.schema = "https://" if ssl else "http://"
 		self.root_url = f"{self.schema}{self.host}:{self.port}/{self.version}"
 
+		if token:
+			headers = dict(headers) if headers else {}
+			headers["Authorization"] = f"Bearer {token}"
 		self.headers = headers
 
 		self._session = None  # Will be initialized in the subclass
@@ -107,24 +111,30 @@ class BaseClient:
 	def delete_data(self, data_name: str) -> bool:
 		raise NotImplementedError
 
-	def check_permission(
-		self,
-		input_data: dict,
-		policy_name: str,
-		rule_name: str,
-		query_params: Dict[str, bool] = None,
-	) -> dict:
-		raise NotImplementedError
-
 	def query_rule(
 		self,
 		input_data: dict,
 		package_path: str,
 		rule_name: Optional[str] = None,
+		query_params: Dict[str, bool] = None,
 	) -> dict:
 		raise NotImplementedError
 
-	def ad_hoc_query(self, query: str, input_data: dict = None) -> dict:
+	def ad_hoc_query(
+		self,
+		query: str,
+		input_data: dict = None,
+		query_params: Dict[str, bool] = None,
+	) -> dict:
+		raise NotImplementedError
+
+	def bulk_query_rule(
+		self,
+		inputs: Union[List[dict], Dict[str, dict]],
+		package_path: str,
+		rule_name: Optional[str] = None,
+		query_params: Dict[str, bool] = None,
+	) -> Union[List[Any], Dict[str, Any]]:
 		raise NotImplementedError
 
 	def compile_query(
@@ -140,4 +150,16 @@ class BaseClient:
 		raise NotImplementedError
 
 	def get_metrics(self) -> str:
+		raise NotImplementedError
+
+	def get_status(self) -> dict:
+		raise NotImplementedError
+
+	def wait_for_ready(
+		self,
+		timeout: float = 10.0,
+		interval: float = 0.5,
+		query: Dict[str, bool] = None,
+		diagnostic_url: str = None,
+	) -> bool:
 		raise NotImplementedError

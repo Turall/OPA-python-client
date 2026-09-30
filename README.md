@@ -87,6 +87,35 @@ client = create_opa_client(async_mode=True,host="localhost", port=8181)
 
 ```
 
+## Authentication with a Bearer Token
+
+If your OPA server is configured with token-based authentication, pass a `token` and the client will send it as an `Authorization: Bearer <token>` header on every request:
+
+```python
+from opa_client.opa import OpaClient
+
+client = OpaClient(host='opa.example.com', token='my-secret-token')
+```
+
+This works the same way for `AsyncOpaClient`.
+
+## Waiting for OPA to Become Ready
+
+Useful during container/CI startup, when OPA may not be immediately reachable:
+
+```python
+from opa_client.opa import OpaClient
+
+client = OpaClient()
+client.wait_for_ready(timeout=10)  # blocks until healthy, or raises ConnectionsError
+```
+
+- **Asynchronous**:
+
+```python
+await client.wait_for_ready(timeout=10)
+```
+
 ## Secure Connection with SSL/TLS
 
 You can use OpaClient with secure SSL/TLS connections, including mutual TLS (mTLS), by providing a client certificate and key.
@@ -418,6 +447,29 @@ print(client.get_metrics())
 print(await client.get_metrics())
 ```
 
+#### Get Server Status
+
+Retrieve OPA's bundle activation, discovery, and plugin status (requires the [status plugin](https://www.openpolicyagent.org/docs/latest/monitoring/#status) to be enabled on the server):
+
+- **Synchronous**:
+
+```python
+print(client.get_status())
+# {'result': {'labels': {...}, 'bundles': {...}, 'plugins': {...}}}
+```
+
+- **Asynchronous**:
+
+```python
+print(await client.get_status())
+```
+
+If the status plugin isn't enabled, OPA itself responds with a 500 and a
+`"status plugin not enabled"` message. `get_status()` doesn't hide this behind
+a generic connection error — it raises a normal `requests.exceptions.HTTPError`
+(sync) or `aiohttp.ClientResponseError` (async), with OPA's real response
+still accessible (e.g. `e.response.json()["message"]` on the sync client).
+
 ### Policy Evaluation
 
 #### Check Permission (Policy Evaluation)
@@ -466,38 +518,16 @@ print(await client.query_rule(input_data=check_data, package_path="play", rule_n
 
 ```
 
-You can evaluate policies with input data using `check_permission`.
-### ⚠️ Deprecated: `check_permission()`
-
-This method introspects the policy AST to construct a query path dynamically. It introduces unnecessary overhead and is **not recommended** for production use.
-
-- **Synchronous**:
+You can pass OPA query parameters (e.g. `explain`, `metrics`, `pretty`, `instrument`) via `query_params`:
 
 ```python
-input_data = {"user": "admin"}
-policy_name = 'example_policy'
-rule_name = 'allow'
-
-result = client.check_permission(input_data, policy_name, rule_name)
-print(result)
+print(client.query_rule(
+    input_data=check_data,
+    package_path="play",
+    rule_name="hello",
+    query_params={"metrics": True},
+))
 ```
-> 🔥 Prefer `query_rule()` instead for better performance and maintainability.
-
-### ⚠️ Deprecated: `check_permission()`
-
-- **Asynchronous**:
-
-```python
-input_data = {"user": "admin"}
-policy_name = 'example_policy'
-rule_name = 'allow'
-
-result = await client.check_permission(input_data, policy_name, rule_name)
-print(result)
-```
-> 🔥 Prefer `query_rule()` instead for better performance and maintainability.
-
-
 
 ### Ad-hoc Queries
 
@@ -550,6 +580,61 @@ await client.update_or_create_data(data, "userinfo")
 result = await client.ad_hoc_query(query="data.userinfo.user_roles[name]")
 print(result) # {'result': [{'name': 'alice'}, {'name': 'bob'}, {'name': 'eve'}]}
 ```
+
+`ad_hoc_query` also accepts `query_params` for `explain`, `metrics`, `pretty`, etc., the same way `query_rule` does.
+
+### Bulk Rule Evaluation
+
+> **Note:** Open-source OPA has no dedicated "batch decision" REST endpoint — that only exists in Styra's discontinued Enterprise OPA fork. `bulk_query_rule` gets you the same practical benefit (evaluating one rule against many inputs in a single HTTP round-trip) by building one ad-hoc query that overrides `input` per item with Rego's `with` keyword, which works against any standard OPA server.
+
+Use `bulk_query_rule` when you need a policy decision for many resources/users at once (e.g. filtering a list by permission) without making one `query_rule` HTTP call per item:
+
+- **Synchronous**:
+
+```python
+rego = """
+package app.abac
+
+default allow = false
+
+allow {
+    input.role == "admin"
+}
+"""
+client.update_policy_from_string(rego, "abac")
+
+# Pass a list for positional results:
+result = client.bulk_query_rule(
+    [{"role": "admin"}, {"role": "user"}],
+    package_path="app.abac",
+    rule_name="allow",
+)
+print(result)  # [True, False]
+
+# Or a dict to get results keyed by your own IDs:
+result = client.bulk_query_rule(
+    {"alice": {"role": "admin"}, "bob": {"role": "user"}},
+    package_path="app.abac",
+    rule_name="allow",
+)
+print(result)  # {'alice': True, 'bob': False}
+```
+
+- **Asynchronous**:
+
+```python
+result = await client.bulk_query_rule(
+    [{"role": "admin"}, {"role": "user"}],
+    package_path="app.abac",
+    rule_name="allow",
+)
+print(result)  # [True, False]
+```
+
+Notes:
+- `package_path` and `rule_name` must be valid Rego identifiers (dot-separated for `package_path`); a `ValueError` is raised otherwise.
+- The rule must resolve to a defined value for every input (e.g. via a `default` declaration). If it's undefined for any input, `bulk_query_rule` raises `QueryExecuteError` rather than silently dropping that result.
+- An empty `inputs` list/dict short-circuits to `[]`/`{}` without making a request.
 
 ### Compile API (Partial Evaluation)
 
@@ -615,16 +700,40 @@ print(result) # {'result': {'queries': [[]]}}
 - `get_data(data_name)`: Retrieve data from OPA.
 - `patch_data(data_name, patches)`: Partially update data using a JSON Patch (RFC 6902) document.
 - `delete_data(data_name)`: Delete data from OPA.
-- `check_permission(input_data, policy_name, rule_name)`: Evaluate a policy using input data.
-- `query_rule(input_data, package_path, rule_name)`: Query a specific rule in a package.
-- `ad_hoc_query(query, input_data)`: Run an ad-hoc query.
+- `query_rule(input_data, package_path, rule_name, query_params)`: Query a specific rule in a package.
+- `ad_hoc_query(query, input_data, query_params)`: Run an ad-hoc query.
+- `bulk_query_rule(inputs, package_path, rule_name, query_params)`: Evaluate the same rule against many inputs (list or dict) in a single request.
 - `compile_query(query, input_data, unknowns, options)`: Partially evaluate a query using the Compile API.
 - `get_config()`: Get OPA's active server configuration.
 - `get_metrics()`: Get Prometheus-formatted server performance metrics.
+- `get_status()`: Get OPA's bundle/discovery/plugin status.
+- `wait_for_ready(timeout, interval)`: Block until OPA reports healthy, or raise `ConnectionsError`.
 
 ### Asynchronous Client (AsyncOpaClient)
 
 Same as the synchronous client, but all methods are asynchronous and must be awaited.
+
+## Command-Line Interface
+
+Installing the package also installs an `opa-client` CLI for scripting and CI use:
+
+```bash
+opa-client --host localhost --port 8181 health
+opa-client wait-for-ready --max-wait 10
+opa-client list-policies
+opa-client put-policy example --file ./example.rego
+opa-client get-policy example
+opa-client put-data acl --file ./acl.json
+opa-client get-data acl
+opa-client query-rule play hello --input '{"message": "world"}'
+opa-client bulk-query-rule app.abac allow --inputs-json '[{"role": "admin"}, {"role": "user"}]'
+opa-client query "data.play.hello == true" --input '{"message": "world"}'
+opa-client status
+opa-client config
+opa-client metrics
+```
+
+Use `--ssl` and `--token <token>` for secured servers. Run `opa-client <command> --help` for the full option list of any subcommand.
 
 ## Contributing
 

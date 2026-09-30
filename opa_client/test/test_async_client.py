@@ -1,11 +1,14 @@
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
+import aiohttp
+
 from opa_client import create_opa_client
 from opa_client.errors import (
 	ConnectionsError,
 	DeletePolicyError,
 	PatchDataError,
+	QueryExecuteError,
 	RegoParseError,
 )
 
@@ -208,6 +211,162 @@ class TestAsyncOpaClient(unittest.IsolatedAsyncioTestCase):
 	async def test_patch_data_invalid_type(self):
 		with self.assertRaises(TypeError):
 			await self.client.patch_data("users", {"op": "add"})
+
+	@patch("aiohttp.ClientSession.request", new_callable=AsyncMock)
+	async def test_get_status(self, mock_request):
+		mock_response = AsyncMock()
+		mock_response.status = 200
+		mock_response.raise_for_status = Mock()
+		mock_response.json = AsyncMock(
+			return_value={"result": {"labels": {"version": "0.68.0"}}}
+		)
+		mock_request.return_value = mock_response
+
+		result = await self.client.get_status()
+		self.assertEqual(result["result"]["labels"]["version"], "0.68.0")
+		call_args = mock_request.call_args
+		self.assertTrue(call_args.args[1].endswith("/v1/status"))
+
+	@patch("aiohttp.ClientSession.request", new_callable=AsyncMock)
+	async def test_get_status_raises_http_error_when_plugin_disabled(
+		self, mock_request
+	):
+		mock_response = AsyncMock()
+		mock_response.status = 400
+		mock_response.raise_for_status = Mock(
+			side_effect=aiohttp.ClientResponseError(
+				request_info=Mock(),
+				history=(),
+				status=500,
+				message="Internal Server Error",
+			)
+		)
+		mock_request.return_value = mock_response
+
+		with self.assertRaises(aiohttp.ClientResponseError):
+			await self.client.get_status()
+
+	@patch("aiohttp.ClientSession.request", new_callable=AsyncMock)
+	async def test_wait_for_ready_success(self, mock_request):
+		unhealthy = AsyncMock(status=500)
+		healthy = AsyncMock(status=200)
+		mock_request.side_effect = [unhealthy, healthy]
+
+		result = await self.client.wait_for_ready(timeout=5, interval=0)
+		self.assertTrue(result)
+		self.assertEqual(mock_request.call_count, 2)
+
+	@patch("aiohttp.ClientSession.request", new_callable=AsyncMock)
+	async def test_wait_for_ready_timeout(self, mock_request):
+		mock_request.return_value = AsyncMock(status=500)
+
+		with self.assertRaises(ConnectionsError):
+			await self.client.wait_for_ready(timeout=0.05, interval=0.01)
+
+	async def test_token_sets_authorization_header(self):
+		client = create_opa_client(
+			async_mode=True,
+			host="localhost",
+			port=8181,
+			token="secret-token",
+		)
+		self.assertEqual(
+			client.headers["Authorization"], "Bearer secret-token"
+		)
+
+	@patch("aiohttp.ClientSession.request", new_callable=AsyncMock)
+	async def test_query_rule_with_query_params(self, mock_request):
+		mock_response = AsyncMock()
+		mock_response.status = 200
+		mock_response.raise_for_status = Mock()
+		mock_response.json = AsyncMock(return_value={"result": True})
+		mock_request.return_value = mock_response
+
+		result = await self.client.query_rule(
+			{"message": "world"},
+			"play",
+			"hello",
+			query_params={"metrics": True},
+		)
+		self.assertEqual(result, {"result": True})
+		call_args = mock_request.call_args
+		self.assertIn("metrics=True", call_args.args[1])
+
+	@patch("aiohttp.ClientSession.request", new_callable=AsyncMock)
+	async def test_ad_hoc_query_with_query_params(self, mock_request):
+		mock_response = AsyncMock()
+		mock_response.status = 200
+		mock_response.raise_for_status = Mock()
+		mock_response.json = AsyncMock(return_value={"result": []})
+		mock_request.return_value = mock_response
+
+		result = await self.client.ad_hoc_query(
+			"data.example.allow", query_params={"explain": "full"}
+		)
+		self.assertEqual(result, {"result": []})
+		call_args = mock_request.call_args
+		self.assertIn("explain=full", call_args.args[1])
+
+	@patch("aiohttp.ClientSession.request", new_callable=AsyncMock)
+	async def test_bulk_query_rule_with_list_input(self, mock_request):
+		mock_response = AsyncMock()
+		mock_response.status = 200
+		mock_response.raise_for_status = Mock()
+		mock_response.json = AsyncMock(
+			return_value={"result": [{"r0": True, "r1": False}]}
+		)
+		mock_request.return_value = mock_response
+
+		result = await self.client.bulk_query_rule(
+			[{"role": "admin"}, {"role": "user"}], "app.abac", "allow"
+		)
+		self.assertEqual(result, [True, False])
+
+	@patch("aiohttp.ClientSession.request", new_callable=AsyncMock)
+	async def test_bulk_query_rule_with_dict_input(self, mock_request):
+		mock_response = AsyncMock()
+		mock_response.status = 200
+		mock_response.raise_for_status = Mock()
+		mock_response.json = AsyncMock(
+			return_value={"result": [{"r0": True, "r1": False}]}
+		)
+		mock_request.return_value = mock_response
+
+		result = await self.client.bulk_query_rule(
+			{"alice": {"role": "admin"}, "bob": {"role": "user"}},
+			"app.abac",
+			"allow",
+		)
+		self.assertEqual(result, {"alice": True, "bob": False})
+
+	async def test_bulk_query_rule_empty_inputs_skips_request(self):
+		self.assertEqual(
+			await self.client.bulk_query_rule([], "app.abac", "allow"), []
+		)
+		self.assertEqual(
+			await self.client.bulk_query_rule({}, "app.abac", "allow"), {}
+		)
+
+	async def test_bulk_query_rule_rejects_invalid_package_path(self):
+		with self.assertRaises(ValueError):
+			await self.client.bulk_query_rule(
+				[{"role": "admin"}], "app; malicious", "allow"
+			)
+
+	@patch("aiohttp.ClientSession.request", new_callable=AsyncMock)
+	async def test_bulk_query_rule_raises_on_undefined_rule(
+		self, mock_request
+	):
+		mock_response = AsyncMock()
+		mock_response.status = 200
+		mock_response.raise_for_status = Mock()
+		mock_response.json = AsyncMock(return_value={})
+		mock_request.return_value = mock_response
+
+		with self.assertRaises(QueryExecuteError):
+			await self.client.bulk_query_rule(
+				[{"role": "admin"}], "app.abac", "allow"
+			)
 
 	# Add more test methods to cover other functionalities
 

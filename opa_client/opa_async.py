@@ -1,9 +1,11 @@
 import asyncio
+import json
 import os
+import re
 import ssl
-import warnings
+import time
 from contextlib import asynccontextmanager
-from typing import Dict, Optional
+from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urlencode
 
 import aiofiles
@@ -12,7 +14,6 @@ from aiohttp import ClientSession, TCPConnector
 
 from .base import BaseClient
 from .errors import (
-	CheckPermissionError,
 	ConnectionsError,
 	DeleteDataError,
 	DeletePolicyError,
@@ -20,9 +21,12 @@ from .errors import (
 	PatchDataError,
 	PathNotFoundError,
 	PolicyNotFoundError,
+	QueryExecuteError,
 	TypeException,
 )
 from .rego_compat import is_v0_rego_syntax_error
+
+_REGO_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 _RETRYABLE_STATUS_CODES = frozenset({500, 502, 504})
 _BACKOFF_FACTOR = 0.3
@@ -39,6 +43,7 @@ class AsyncOpaClient(BaseClient):
 	    ssl (bool): Verify SSL certificates for HTTPS requests, defaults to False.
 	    cert (Optional[str] or Tuple[str, str]): Path to client certificate or a tuple of (cert_file, key_file).
 	    headers (Optional[dict]): Dictionary of headers to send, defaults to None.
+	    token (Optional[str]): Bearer token added as an Authorization header.
 	    retries (int): Number of retries for failed requests, defaults to 2.
 	    timeout (float): Timeout for requests in seconds, defaults to 1.5.
 
@@ -190,6 +195,54 @@ class AsyncOpaClient(BaseClient):
 			response.raise_for_status()
 			return await response.text()
 
+	async def get_status(self) -> dict:
+		"""
+		Returns the OPA server's status, including bundle activation,
+		discovery, and plugin status (requires the status plugin to be
+		enabled on the server; otherwise OPA itself returns a 500 with
+		a "status plugin not enabled" message).
+
+		Returns:
+		    dict: The status document.
+		"""
+		url = f"{self.root_url}/status"
+		async with self._request("GET", url) as response:
+			response.raise_for_status()
+			return await response.json()
+
+	async def wait_for_ready(
+		self,
+		timeout: float = 10.0,
+		interval: float = 0.5,
+		query: Dict[str, bool] = None,
+		diagnostic_url: str = None,
+	) -> bool:
+		"""
+		Wait until the OPA server reports healthy, or raise ConnectionsError
+		once `timeout` seconds have elapsed.
+
+		Parameters:
+		    timeout (float): Maximum time to wait, in seconds.
+		    interval (float): Time to sleep between health checks, in seconds.
+		    query (Dict[str, bool], optional): Query parameters for the health check.
+		    diagnostic_url (str, optional): Custom diagnostic URL.
+
+		Returns:
+		    bool: True once OPA becomes healthy.
+		"""
+		deadline = time.monotonic() + timeout
+		while True:
+			if await self.check_health(
+				query=query, diagnostic_url=diagnostic_url
+			):
+				return True
+			if time.monotonic() >= deadline:
+				raise ConnectionsError(
+					"Service not ready",
+					f"OPA did not become healthy within {timeout}s",
+				)
+			await asyncio.sleep(interval)
+
 	async def get_policies_list(self) -> list:
 		"""Returns all OPA policies in the service."""
 		url = f"{self.root_url}/policies/"
@@ -314,10 +367,9 @@ class AsyncOpaClient(BaseClient):
 		Returns:
 		    bool: True if the policy was successfully updated.
 		"""
-		async with aiohttp.ClientSession() as session:
-			async with session.get(url) as response:
-				response.raise_for_status()
-				policy_str = await response.text()
+		async with self._request("GET", url) as response:
+			response.raise_for_status()
+			policy_str = await response.text()
 
 		return await self.update_policy_from_string(policy_str, endpoint)
 
@@ -392,12 +444,13 @@ class AsyncOpaClient(BaseClient):
 		if query_params:
 			url = f"{url}?{urlencode(query_params)}"
 		async with self._request("GET", url) as response:
-			if response.status == 200:
-				return await response.json()
+			body = await response.json()
+			if response.status == 200 and "result" in body:
+				return body
 			else:
-				error = await response.json()
 				raise PolicyNotFoundError(
-					error.get("code"), error.get("message")
+					body.get("code", "PolicyNotFoundError"),
+					body.get("message", "requested data not found"),
 				)
 
 	async def policy_to_file(
@@ -494,46 +547,30 @@ class AsyncOpaClient(BaseClient):
 				error = await response.json()
 				raise DeleteDataError(error.get("code"), error.get("message"))
 
-	async def check_permission(
+	async def query_rule(
 		self,
 		input_data: dict,
-		policy_name: str,
-		rule_name: str,
+		package_path: str,
+		rule_name: Optional[str] = None,
 		query_params: Dict[str, bool] = None,
 	) -> dict:
 		"""
-		Check permissions based on input data, policy name, and rule name.
+		Query a specific rule in a package.
 
 		Parameters:
-		    input_data (dict): The input data to check against the policy.
-		    policy_name (str): The name of the policy.
-		    rule_name (str): The name of the rule in the policy.
-		    query_params (Dict[str, bool], optional): Query parameters.
+		    input_data (dict): The input data for the query.
+		    package_path (str): The package path.
+		    rule_name (Optional[str]): The rule name.
+		    query_params (Dict[str, bool], optional): Query parameters,
+		        e.g. {"explain": "full", "metrics": True, "pretty": True}.
 
 		Returns:
-		    dict: The result of the permission check.
+		    dict: The result of the query.
 		"""
-		warnings.warn(
-			"check_permission is deprecated and will be removed in a future release. Use `query_rule` instead.",
-			DeprecationWarning,
-			stacklevel=2,
-		)
-		policy = await self.get_policy(policy_name)
-		ast = policy.get("result", {}).get("ast", {})
-		package_path = "/".join(
-			[p.get("value") for p in ast.get("package", {}).get("path", [])]
-		)
-		rules = [
-			rule.get("head", {}).get("name") for rule in ast.get("rules", [])
-		]
-
-		if rule_name not in rules:
-			raise CheckPermissionError(
-				"resource_not_found",
-				f"Rule '{rule_name}' not found in policy '{policy_name}'",
-			)
-
-		url = f"{self.root_url}/{package_path}/{rule_name}"
+		path = package_path.replace(".", "/")
+		if rule_name:
+			path = f"{path}/{rule_name}"
+		url = f"{self.root_url}/data/{path}"
 		if query_params:
 			url = f"{url}?{urlencode(query_params)}"
 
@@ -543,46 +580,27 @@ class AsyncOpaClient(BaseClient):
 			response.raise_for_status()
 			return await response.json()
 
-	async def query_rule(
+	async def ad_hoc_query(
 		self,
-		input_data: dict,
-		package_path: str,
-		rule_name: Optional[str] = None,
+		query: str,
+		input_data: dict = None,
+		query_params: Dict[str, bool] = None,
 	) -> dict:
-		"""
-		Query a specific rule in a package.
-
-		Parameters:
-		    input_data (dict): The input data for the query.
-		    package_path (str): The package path.
-		    rule_name (Optional[str]): The rule name.
-
-		Returns:
-		    dict: The result of the query.
-		"""
-		path = package_path.replace(".", "/")
-		if rule_name:
-			path = f"{path}/{rule_name}"
-		url = f"{self.root_url}/data/{path}"
-
-		async with self._request(
-			"POST", url, json={"input": input_data}
-		) as response:
-			response.raise_for_status()
-			return await response.json()
-
-	async def ad_hoc_query(self, query: str, input_data: dict = None) -> dict:
 		"""
 		Execute an ad-hoc query.
 
 		Parameters:
 		    query (str): The query string.
 		    input_data (dict, optional): The input data for the query.
+		    query_params (Dict[str, bool], optional): Query parameters,
+		        e.g. {"explain": "full", "metrics": True, "pretty": True}.
 
 		Returns:
 		    dict: The result of the query.
 		"""
 		url = f"{self.schema}{self.host}:{self.port}/v1/query"
+		if query_params:
+			url = f"{url}?{urlencode(query_params)}"
 		payload = {"query": query}
 		if input_data:
 			payload["input"] = input_data
@@ -590,6 +608,75 @@ class AsyncOpaClient(BaseClient):
 		async with self._request("POST", url, json=payload) as response:
 			response.raise_for_status()
 			return await response.json()
+
+	async def bulk_query_rule(
+		self,
+		inputs: Union[List[dict], Dict[str, dict]],
+		package_path: str,
+		rule_name: Optional[str] = None,
+		query_params: Dict[str, bool] = None,
+	) -> Union[List[Any], Dict[str, Any]]:
+		"""
+		Evaluate the same rule against many different inputs in a single
+		round-trip. Each input is evaluated with its own `with input as
+		...` override inside one ad-hoc query, so OPA compiles and runs
+		all of them together instead of one HTTP request per input.
+
+		Parameters:
+		    inputs (Union[List[dict], Dict[str, dict]]): The inputs to
+		        evaluate the rule against. Pass a list for positional
+		        results, or a dict to get results keyed by your own IDs.
+		    package_path (str): The package path, e.g. "app.abac".
+		    rule_name (Optional[str]): The rule name, e.g. "allow".
+		    query_params (Dict[str, bool], optional): Query parameters,
+		        e.g. {"metrics": True}.
+
+		Returns:
+		    Union[List[Any], Dict[str, Any]]: The rule's result for each
+		    input, in the same shape (list or dict) as `inputs`.
+
+		Raises:
+		    ValueError: If `package_path`/`rule_name` isn't a valid Rego
+		        identifier, or if the value is a list/dict of length 0.
+		    QueryExecuteError: If the rule is undefined for at least one
+		        of the inputs (e.g. it has no `default` value and the
+		        condition doesn't match).
+		"""
+		for segment in package_path.split("."):
+			if not _REGO_IDENTIFIER_RE.match(segment):
+				raise ValueError(f"Invalid package path segment: {segment!r}")
+		if rule_name and not _REGO_IDENTIFIER_RE.match(rule_name):
+			raise ValueError(f"Invalid rule name: {rule_name!r}")
+
+		is_mapping = isinstance(inputs, dict)
+		items = list(inputs.items()) if is_mapping else list(enumerate(inputs))
+		if not items:
+			return {} if is_mapping else []
+
+		rule_ref = f"data.{package_path}"
+		if rule_name:
+			rule_ref = f"{rule_ref}.{rule_name}"
+
+		var_names = [f"r{i}" for i in range(len(items))]
+		statements = [
+			f"{var} := {rule_ref} with input as {json.dumps(item_input)}"
+			for var, (_, item_input) in zip(var_names, items)
+		]
+		response = await self.ad_hoc_query(
+			"; ".join(statements), query_params=query_params
+		)
+		result_rows = response.get("result")
+		if not result_rows:
+			raise QueryExecuteError(
+				rule_ref,
+				"Rule is undefined for at least one input; check that "
+				"it has a default value.",
+			)
+		values = [result_rows[0].get(var) for var in var_names]
+
+		if is_mapping:
+			return dict(zip((key for key, _ in items), values))
+		return values
 
 	async def compile_query(
 		self,
@@ -642,17 +729,3 @@ async def main():
 # Run the example
 if __name__ == "__main__":
 	asyncio.run(main())
-
-	# Example usage:
-	async def main():
-		async with AsyncOpaClient(
-			host="localhost",
-			port=8181,
-			ssl=True,
-			cert=("/path/to/cert.pem", "/path/to/key.pem"),
-		) as client:
-			try:
-				result = await client.check_connection()
-				print(result)
-			finally:
-				await client.close_connection()
