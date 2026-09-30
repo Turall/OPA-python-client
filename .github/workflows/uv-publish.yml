@@ -1,0 +1,19 @@
+name: Upload OPA-python-client
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: astral-sh/setup-uv@v3
+      with:
+        python-version: '3.10'
+    - name: Build and publish
+      run: |
+        uv version $(git describe --tags --abbrev=0)
+        uv build
+        uv publish --username ${{ secrets.PYPI_USERNAME }} --password ${{ secrets.PYPI_PASSWORD }}

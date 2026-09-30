@@ -8,6 +8,7 @@ from opa_client.errors import (
 	ConnectionsError,
 	DeletePolicyError,
 	PatchDataError,
+	QueryExecuteError,
 	RegoParseError,
 )
 
@@ -86,8 +87,8 @@ class TestOpaClient(unittest.TestCase):
 		result = self.client.update_policy_from_string(new_policy, "example")
 		self.assertTrue(result)
 		self.assertEqual(mock_put.call_count, 2)
-		upgraded_payload = mock_put.call_args_list[1].kwargs["data"].decode(
-			"utf-8"
+		upgraded_payload = (
+			mock_put.call_args_list[1].kwargs["data"].decode("utf-8")
 		)
 		self.assertIn("allow if {", upgraded_payload)
 		self.assertNotIn("import rego.v1", upgraded_payload)
@@ -209,6 +210,157 @@ class TestOpaClient(unittest.TestCase):
 	def test_patch_data_invalid_type(self):
 		with self.assertRaises(TypeError):
 			self.client.patch_data("users", {"op": "add"})
+
+	@patch("requests.Session.get")
+	def test_get_status(self, mock_get):
+		mock_response = Mock()
+		mock_response.status_code = 200
+		mock_response.json.return_value = {
+			"result": {"labels": {"version": "0.68.0"}}
+		}
+		mock_get.return_value = mock_response
+
+		result = self.client.get_status()
+		self.assertEqual(result["result"]["labels"]["version"], "0.68.0")
+		call_url = mock_get.call_args.args[0]
+		self.assertTrue(call_url.endswith("/v1/status"))
+
+	@patch("requests.Session.get")
+	def test_get_status_raises_http_error_when_plugin_disabled(
+		self, mock_get
+	):
+		error_response = Mock()
+		error_response.json.return_value = {
+			"code": "internal_error",
+			"message": "status plugin not enabled",
+		}
+		http_error = requests.exceptions.HTTPError(response=error_response)
+		mock_response = Mock()
+		mock_response.raise_for_status.side_effect = http_error
+		mock_get.return_value = mock_response
+
+		with self.assertRaises(requests.exceptions.HTTPError) as ctx:
+			self.client.get_status()
+		self.assertEqual(
+			ctx.exception.response.json()["message"],
+			"status plugin not enabled",
+		)
+
+	@patch("requests.Session.get")
+	def test_wait_for_ready_success(self, mock_get):
+		unhealthy = Mock(status_code=500)
+		healthy = Mock(status_code=200)
+		mock_get.side_effect = [unhealthy, healthy]
+
+		result = self.client.wait_for_ready(timeout=5, interval=0)
+		self.assertTrue(result)
+		self.assertEqual(mock_get.call_count, 2)
+
+	@patch("requests.Session.get")
+	def test_wait_for_ready_timeout(self, mock_get):
+		mock_get.return_value = Mock(status_code=500)
+
+		with self.assertRaises(ConnectionsError):
+			self.client.wait_for_ready(timeout=0.05, interval=0.01)
+
+	def test_token_sets_authorization_header(self):
+		client = create_opa_client(
+			host="localhost", port=8181, token="secret-token"
+		)
+		self.assertEqual(
+			client.headers["Authorization"], "Bearer secret-token"
+		)
+		client.close_connection()
+
+	@patch("requests.Session.post")
+	def test_query_rule_with_query_params(self, mock_post):
+		mock_response = Mock()
+		mock_response.status_code = 200
+		mock_response.json.return_value = {"result": True}
+		mock_post.return_value = mock_response
+
+		result = self.client.query_rule(
+			{"message": "world"},
+			"play",
+			"hello",
+			query_params={"metrics": True},
+		)
+		self.assertEqual(result, {"result": True})
+		call_url = mock_post.call_args.args[0]
+		self.assertIn("metrics=True", call_url)
+
+	@patch("requests.Session.post")
+	def test_ad_hoc_query_with_query_params(self, mock_post):
+		mock_response = Mock()
+		mock_response.status_code = 200
+		mock_response.json.return_value = {"result": []}
+		mock_post.return_value = mock_response
+
+		result = self.client.ad_hoc_query(
+			"data.example.allow", query_params={"explain": "full"}
+		)
+		self.assertEqual(result, {"result": []})
+		call_url = mock_post.call_args.args[0]
+		self.assertIn("explain=full", call_url)
+
+	@patch("requests.Session.post")
+	def test_bulk_query_rule_with_list_input(self, mock_post):
+		mock_response = Mock()
+		mock_response.status_code = 200
+		mock_response.json.return_value = {
+			"result": [{"r0": True, "r1": False}]
+		}
+		mock_post.return_value = mock_response
+
+		result = self.client.bulk_query_rule(
+			[{"role": "admin"}, {"role": "user"}], "app.abac", "allow"
+		)
+		self.assertEqual(result, [True, False])
+		payload = mock_post.call_args.kwargs["json"]
+		self.assertIn("r0 := data.app.abac.allow with input as", payload["query"])
+		self.assertIn("r1 := data.app.abac.allow with input as", payload["query"])
+
+	@patch("requests.Session.post")
+	def test_bulk_query_rule_with_dict_input(self, mock_post):
+		mock_response = Mock()
+		mock_response.status_code = 200
+		mock_response.json.return_value = {
+			"result": [{"r0": True, "r1": False}]
+		}
+		mock_post.return_value = mock_response
+
+		result = self.client.bulk_query_rule(
+			{"alice": {"role": "admin"}, "bob": {"role": "user"}},
+			"app.abac",
+			"allow",
+		)
+		self.assertEqual(result, {"alice": True, "bob": False})
+
+	def test_bulk_query_rule_empty_inputs_skips_request(self):
+		self.assertEqual(
+			self.client.bulk_query_rule([], "app.abac", "allow"), []
+		)
+		self.assertEqual(
+			self.client.bulk_query_rule({}, "app.abac", "allow"), {}
+		)
+
+	def test_bulk_query_rule_rejects_invalid_package_path(self):
+		with self.assertRaises(ValueError):
+			self.client.bulk_query_rule(
+				[{"role": "admin"}], "app; malicious", "allow"
+			)
+
+	@patch("requests.Session.post")
+	def test_bulk_query_rule_raises_on_undefined_rule(self, mock_post):
+		mock_response = Mock()
+		mock_response.status_code = 200
+		mock_response.json.return_value = {}
+		mock_post.return_value = mock_response
+
+		with self.assertRaises(QueryExecuteError):
+			self.client.bulk_query_rule(
+				[{"role": "admin"}], "app.abac", "allow"
+			)
 
 	# Add more test methods to cover other functionalities
 

@@ -28,16 +28,6 @@ class PolicyNotFoundError(Exception):
 		self.message = message
 
 
-class CheckPermissionError(Exception):
-	def __init__(self, expression, message):
-		"""
-		expression -- input expression in which the error occurred
-		message -- explanation of the error
-		"""
-		self.expression = expression
-		self.message = message
-
-
 class DeleteDataError(Exception):
 	def __init__(self, expression, message):
 		"""

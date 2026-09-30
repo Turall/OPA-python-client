@@ -4,6 +4,7 @@ from opa_client.errors import (
 	ConnectionsError,
 	PatchDataError,
 	PolicyNotFoundError,
+	QueryExecuteError,
 )
 from opa_client.opa import OpaClient
 
@@ -87,7 +88,7 @@ class TestIntegrationOpaClient(unittest.TestCase):
 		with self.assertRaises(PolicyNotFoundError):
 			self.client.get_data(data_name)
 
-	def test_check_permission(self):
+	def test_query_rule(self):
 		# Define a sample policy
 		policy_name = "authz"
 		policy_content = """
@@ -106,12 +107,67 @@ class TestIntegrationOpaClient(unittest.TestCase):
 		# Define sample input data
 		input_data = {"user": {"name": "alice", "role": "admin"}}
 
-		# Check permission
-		result = self.client.check_permission(input_data, policy_name, "allow")
+		# Query the rule
+		result = self.client.query_rule(input_data, "authz", "allow")
 		self.assertIn("result", result), result
 		self.assertTrue(result["result"])
 
 		# Clean up
+		self.client.delete_policy(policy_name)
+
+	def test_bulk_query_rule(self):
+		policy_name = "authz_bulk"
+		policy_content = """
+        package authz_bulk
+
+        default allow = false
+
+        allow {
+            input.role == "admin"
+        }
+        """
+		self.client.update_policy_from_string(policy_content, policy_name)
+
+		inputs = [{"role": "admin"}, {"role": "user"}, {"role": "admin"}]
+		result = self.client.bulk_query_rule(inputs, "authz_bulk", "allow")
+		self.assertEqual(result, [True, False, True])
+
+		keyed_inputs = {
+			"alice": {"role": "admin"},
+			"bob": {"role": "user"},
+		}
+		result = self.client.bulk_query_rule(
+			keyed_inputs, "authz_bulk", "allow"
+		)
+		self.assertEqual(result, {"alice": True, "bob": False})
+
+		self.assertEqual(
+			self.client.bulk_query_rule([], "authz_bulk", "allow"), []
+		)
+
+		with self.assertRaises(ValueError):
+			self.client.bulk_query_rule(
+				[{"role": "admin"}], "authz_bulk; drop", "allow"
+			)
+
+		self.client.delete_policy(policy_name)
+
+	def test_bulk_query_rule_undefined_rule_raises(self):
+		policy_name = "authz_bulk_nodefault"
+		policy_content = """
+        package authz_bulk_nodefault
+
+        allow {
+            input.role == "admin"
+        }
+        """
+		self.client.update_policy_from_string(policy_content, policy_name)
+
+		with self.assertRaises(QueryExecuteError):
+			self.client.bulk_query_rule(
+				[{"role": "user"}], "authz_bulk_nodefault", "allow"
+			)
+
 		self.client.delete_policy(policy_name)
 
 	def test_compile_query(self):

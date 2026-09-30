@@ -1,7 +1,9 @@
+import json
 import os
+import re
 import threading
-import warnings
-from typing import Dict, Optional
+import time
+from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urlencode
 
 import requests
@@ -11,7 +13,6 @@ from urllib3.util.retry import Retry
 from .base import BaseClient
 from .rego_compat import is_v0_rego_syntax_error
 from .errors import (
-	CheckPermissionError,
 	ConnectionsError,
 	DeleteDataError,
 	DeletePolicyError,
@@ -19,8 +20,11 @@ from .errors import (
 	PatchDataError,
 	PathNotFoundError,
 	PolicyNotFoundError,
+	QueryExecuteError,
 	TypeException,
 )
+
+_REGO_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 
 class OpaClient(BaseClient):
@@ -34,6 +38,7 @@ class OpaClient(BaseClient):
 	    ssl (bool): Verify SSL certificates for HTTPS requests, defaults to False.
 	    cert (Optional[str]): Path to client certificate for mutual TLS authentication.
 	    headers (Optional[dict]): Dictionary of headers to send, defaults to None.
+	    token (Optional[str]): Bearer token added as an Authorization header.
 	    retries (int): Number of retries for failed requests, defaults to 2.
 	    timeout (float): Timeout for requests in seconds, defaults to 1.5.
 
@@ -56,6 +61,10 @@ class OpaClient(BaseClient):
 			total=self.retries,
 			backoff_factor=0.3,
 			status_forcelist=(500, 502, 504),
+			# Return the final response instead of raising a generic,
+			# body-less RetryError once retries are exhausted, so callers'
+			# raise_for_status() can surface OPA's actual error message.
+			raise_on_status=False,
 		)
 		adapter = HTTPAdapter(max_retries=retries)
 
@@ -143,6 +152,52 @@ class OpaClient(BaseClient):
 		response = self._session.get(url, timeout=self.timeout)
 		response.raise_for_status()
 		return response.text
+
+	def get_status(self) -> dict:
+		"""
+		Returns the OPA server's status, including bundle activation,
+		discovery, and plugin status (requires the status plugin to be
+		enabled on the server; otherwise OPA itself returns a 500 with
+		a "status plugin not enabled" message).
+
+		Returns:
+		    dict: The status document.
+		"""
+		url = f"{self.root_url}/status"
+		response = self._session.get(url, timeout=self.timeout)
+		response.raise_for_status()
+		return response.json()
+
+	def wait_for_ready(
+		self,
+		timeout: float = 10.0,
+		interval: float = 0.5,
+		query: Dict[str, bool] = None,
+		diagnostic_url: str = None,
+	) -> bool:
+		"""
+		Block until the OPA server reports healthy, or raise ConnectionsError
+		once `timeout` seconds have elapsed.
+
+		Parameters:
+		    timeout (float): Maximum time to wait, in seconds.
+		    interval (float): Time to sleep between health checks, in seconds.
+		    query (Dict[str, bool], optional): Query parameters for the health check.
+		    diagnostic_url (str, optional): Custom diagnostic URL.
+
+		Returns:
+		    bool: True once OPA becomes healthy.
+		"""
+		deadline = time.monotonic() + timeout
+		while True:
+			if self.check_health(query=query, diagnostic_url=diagnostic_url):
+				return True
+			if time.monotonic() >= deadline:
+				raise ConnectionsError(
+					"Service not ready",
+					f"OPA did not become healthy within {timeout}s",
+				)
+			time.sleep(interval)
 
 	def get_policies_list(self) -> list:
 		"""Returns all OPA policies in the service."""
@@ -344,13 +399,13 @@ class OpaClient(BaseClient):
 		if query_params:
 			url = f"{url}?{urlencode(query_params)}"
 		response = self._session.get(url, timeout=self.timeout)
-		if response.status_code == 200 and response.json().get("result"):
-			return response.json()
+		body = response.json()
+		if response.status_code == 200 and "result" in body:
+			return body
 		else:
-			error = response.json()
 			raise PolicyNotFoundError(
-				"PolicyNotFoundError",
-				error.get("message", "requested data not found"),
+				body.get("code", "PolicyNotFoundError"),
+				body.get("message", "requested data not found"),
 			)
 
 	def policy_to_file(
@@ -443,59 +498,12 @@ class OpaClient(BaseClient):
 			error = response.json()
 			raise DeleteDataError(error.get("code"), error.get("message"))
 
-	def check_permission(
-		self,
-		input_data: dict,
-		policy_name: str,
-		rule_name: str,
-		query_params: Dict[str, bool] = None,
-	) -> dict:
-		"""
-		Check permissions based on input data, policy name, and rule name.
-
-		Parameters:
-		    input_data (dict): The input data to check against the policy.
-		    policy_name (str): The name of the policy.
-		    rule_name (str): The name of the rule in the policy.
-		    query_params (Dict[str, bool], optional): Query parameters.
-
-		Returns:
-		    dict: The result of the permission check.
-		"""
-		warnings.warn(
-			"check_permission is deprecated and will be removed in a future release. Use `query_rule` instead.",
-			DeprecationWarning,
-			stacklevel=2
-    	)
-		policy = self.get_policy(policy_name)
-		ast = policy.get("result", {}).get("ast", {})
-		package_path = "/".join(
-			[p.get("value") for p in ast.get("package", {}).get("path", [])]
-		)
-		rules = [
-			rule.get("head", {}).get("name") for rule in ast.get("rules", [])
-		]
-
-		if rule_name not in rules:
-			raise CheckPermissionError(
-				"resource_not_found",
-				f"Rule '{rule_name}' not found in policy '{policy_name}'",
-			)
-
-		url = f"{self.root_url}/{package_path}/{rule_name}"
-		if query_params:
-			url = f"{url}?{urlencode(query_params)}"
-		response = self._session.post(
-			url, json={"input": input_data}, timeout=self.timeout
-		)
-		response.raise_for_status()
-		return response.json()
-
 	def query_rule(
 		self,
 		input_data: dict,
 		package_path: str,
 		rule_name: Optional[str] = None,
+		query_params: Dict[str, bool] = None,
 	) -> dict:
 		"""
 		Query a specific rule in a package.
@@ -504,6 +512,8 @@ class OpaClient(BaseClient):
 		    input_data (dict): The input data for the query.
 		    package_path (str): The package path.
 		    rule_name (Optional[str]): The rule name.
+		    query_params (Dict[str, bool], optional): Query parameters,
+		        e.g. {"explain": "full", "metrics": True, "pretty": True}.
 
 		Returns:
 		    dict: The result of the query.
@@ -512,6 +522,8 @@ class OpaClient(BaseClient):
 		if rule_name:
 			path = f"{path}/{rule_name}"
 		url = f"{self.root_url}/data/{path}"
+		if query_params:
+			url = f"{url}?{urlencode(query_params)}"
 
 		response = self._session.post(
 			url, json={"input": input_data}, timeout=self.timeout
@@ -519,18 +531,27 @@ class OpaClient(BaseClient):
 		response.raise_for_status()
 		return response.json()
 
-	def ad_hoc_query(self, query: str, input_data: dict = None) -> dict:
+	def ad_hoc_query(
+		self,
+		query: str,
+		input_data: dict = None,
+		query_params: Dict[str, bool] = None,
+	) -> dict:
 		"""
 		Execute an ad-hoc query.
 
 		Parameters:
 		    query (str): The query string.
 		    input_data (dict, optional): The input data for the query.
+		    query_params (Dict[str, bool], optional): Query parameters,
+		        e.g. {"explain": "full", "metrics": True, "pretty": True}.
 
 		Returns:
 		    dict: The result of the query.
 		"""
 		url = f"{self.schema}{self.host}:{self.port}/v1/query"
+		if query_params:
+			url = f"{url}?{urlencode(query_params)}"
 		payload = {"query": query}
 		if input_data:
 			payload["input"] = input_data
@@ -540,6 +561,75 @@ class OpaClient(BaseClient):
 		)
 		response.raise_for_status()
 		return response.json()
+
+	def bulk_query_rule(
+		self,
+		inputs: Union[List[dict], Dict[str, dict]],
+		package_path: str,
+		rule_name: Optional[str] = None,
+		query_params: Dict[str, bool] = None,
+	) -> Union[List[Any], Dict[str, Any]]:
+		"""
+		Evaluate the same rule against many different inputs in a single
+		round-trip. Each input is evaluated with its own `with input as
+		...` override inside one ad-hoc query, so OPA compiles and runs
+		all of them together instead of one HTTP request per input.
+
+		Parameters:
+		    inputs (Union[List[dict], Dict[str, dict]]): The inputs to
+		        evaluate the rule against. Pass a list for positional
+		        results, or a dict to get results keyed by your own IDs.
+		    package_path (str): The package path, e.g. "app.abac".
+		    rule_name (Optional[str]): The rule name, e.g. "allow".
+		    query_params (Dict[str, bool], optional): Query parameters,
+		        e.g. {"metrics": True}.
+
+		Returns:
+		    Union[List[Any], Dict[str, Any]]: The rule's result for each
+		    input, in the same shape (list or dict) as `inputs`.
+
+		Raises:
+		    ValueError: If `package_path`/`rule_name` isn't a valid Rego
+		        identifier, or if the value is a list/dict of length 0.
+		    QueryExecuteError: If the rule is undefined for at least one
+		        of the inputs (e.g. it has no `default` value and the
+		        condition doesn't match).
+		"""
+		for segment in package_path.split("."):
+			if not _REGO_IDENTIFIER_RE.match(segment):
+				raise ValueError(f"Invalid package path segment: {segment!r}")
+		if rule_name and not _REGO_IDENTIFIER_RE.match(rule_name):
+			raise ValueError(f"Invalid rule name: {rule_name!r}")
+
+		is_mapping = isinstance(inputs, dict)
+		items = list(inputs.items()) if is_mapping else list(enumerate(inputs))
+		if not items:
+			return {} if is_mapping else []
+
+		rule_ref = f"data.{package_path}"
+		if rule_name:
+			rule_ref = f"{rule_ref}.{rule_name}"
+
+		var_names = [f"r{i}" for i in range(len(items))]
+		statements = [
+			f"{var} := {rule_ref} with input as {json.dumps(item_input)}"
+			for var, (_, item_input) in zip(var_names, items)
+		]
+		response = self.ad_hoc_query(
+			"; ".join(statements), query_params=query_params
+		)
+		result_rows = response.get("result")
+		if not result_rows:
+			raise QueryExecuteError(
+				rule_ref,
+				"Rule is undefined for at least one input; check that "
+				"it has a default value.",
+			)
+		values = [result_rows[0].get(var) for var in var_names]
+
+		if is_mapping:
+			return dict(zip((key for key, _ in items), values))
+		return values
 
 	def compile_query(
 		self,
