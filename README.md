@@ -16,6 +16,7 @@ OpaClient is a Python client library designed to interact with the [Open Policy 
 - **Synchronous & Asynchronous**: Choose between sync or async operations to suit your application.
 - **SSL/TLS Support**: Communicate securely with SSL/TLS, including client certificates.
 - **Customizable**: Use custom headers, timeouts, and other configurations.
+- **Command-Line Interface**: Run policy, data, and query operations from the shell via the `opa-client` CLI.
 
 ## Installation
 
